@@ -23,7 +23,9 @@ Create a Pages project from the repo (or `wrangler pages deploy dist`).
 
 - Build command: `npm run build`
 - Build output directory: `dist`
-- Root directory: `supplytracker-pwa`
+- Root directory: **blank** if this is a dedicated repo (the app is at the repo
+  root — the usual case). Set it to `supplytracker-pwa` ONLY if the app lives in
+  a subfolder of a larger monorepo. Wrong value → `Error: Cannot find cwd …`.
 - Environment variables:
   - `VITE_SUPABASE_URL` = the shared project URL
   - `VITE_SUPABASE_PUBLISHABLE_KEY` = `sb_publishable_…` (safe; RLS-protected)

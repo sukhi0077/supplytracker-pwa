@@ -121,4 +121,43 @@ export class MasterDataRepository {
       "Adding unit",
     ).id;
   }
+
+  static async updateCategory(id, name) {
+    unwrap(
+      await withTimeout(
+        supabase.from("categories").update({ name: name.trim() }).eq("id", id),
+        15000,
+        "Renaming category",
+      ),
+      "Renaming category",
+    );
+    return true;
+  }
+
+  static async updateSubCategory(id, { categoryId, name }) {
+    const patch = {};
+    if (categoryId !== undefined) patch.category_id = categoryId;
+    if (name !== undefined) patch.name = name.trim();
+    unwrap(
+      await withTimeout(
+        supabase.from("sub_categories").update(patch).eq("id", id),
+        15000,
+        "Updating sub-category",
+      ),
+      "Updating sub-category",
+    );
+    return true;
+  }
+
+  static async removeSubCategory(id) {
+    unwrap(
+      await withTimeout(
+        supabase.from("sub_categories").delete().eq("id", id),
+        15000,
+        "Deleting sub-category",
+      ),
+      "Deleting sub-category",
+    );
+    return true;
+  }
 }

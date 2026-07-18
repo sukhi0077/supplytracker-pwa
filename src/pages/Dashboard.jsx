@@ -49,8 +49,8 @@ export default function Dashboard() {
         <Loading label="Loading dashboard…" />
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          <Stat label="Active items" value={activeItems} to="/items" />
-          <Stat label="Active suppliers" value={activeSuppliers} to="/suppliers" />
+          <Stat label="Active items" value={activeItems} to="/masterdata" />
+          <Stat label="Active suppliers" value={activeSuppliers} to="/masterdata" />
           <Stat label="Invoices" value={(invoices.data || []).length} to="/invoices" />
           <Stat label="Low / critical" value={lowStock} to="/stock" tone={lowStock ? "amber" : "slate"} />
           <Stat label="Out of stock" value={outStock} to="/stock" tone={outStock ? "red" : "slate"} />

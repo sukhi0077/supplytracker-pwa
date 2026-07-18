@@ -1,163 +1,48 @@
-// src/pages/MasterData.jsx
+// src/pages/MasterData.jsx — tabbed hub matching the original SupplyTracker:
+// Items | Suppliers | Categories | Sub-categories, all in one place.
 import { useState } from "react";
-import {
-  useMasterData,
-  useAddCategory,
-  useAddSubCategory,
-  useAddUnit,
-} from "../hooks/useCatalogue.js";
-import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
-import { Btn } from "../components/ui/form.jsx";
+import Items from "./Items.jsx";
+import Suppliers from "./Suppliers.jsx";
+import CategoriesManager from "../components/CategoriesManager.jsx";
+import SubCategoriesManager from "../components/SubCategoriesManager.jsx";
 
-function Panel({ title, count, children }) {
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-        <h2 className="font-semibold text-slate-800">{title}</h2>
-        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
-          {count}
-        </span>
-      </div>
-      {children}
-    </Card>
-  );
-}
-
-const inp =
-  "rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400";
+const TABS = [
+  { key: "items", label: "Items" },
+  { key: "suppliers", label: "Suppliers" },
+  { key: "categories", label: "Categories" },
+  { key: "subcategories", label: "Sub-categories" },
+];
 
 export default function MasterData({ isAdmin }) {
-  const { data, isLoading, error } = useMasterData();
-  const addCategory = useAddCategory();
-  const addSub = useAddSubCategory();
-  const addUnit = useAddUnit();
-
-  const [catName, setCatName] = useState("");
-  const [subCatId, setSubCatId] = useState("");
-  const [subName, setSubName] = useState("");
-  const [unitCode, setUnitCode] = useState("");
-
-  if (error) return (<div><PageHeader title="Master data" /><ErrorBox error={error} /></div>);
-  if (isLoading) return (<div><PageHeader title="Master data" /><Loading /></div>);
-
-  const { categories = [], subCategories = [], units = [], conversions = [] } = data || {};
-  const subsByCat = new Map();
-  subCategories.forEach((s) => {
-    if (!subsByCat.has(s.category_id)) subsByCat.set(s.category_id, []);
-    subsByCat.get(s.category_id).push(s);
-  });
+  const [tab, setTab] = useState("items");
 
   return (
     <div>
-      <PageHeader
-        title="Master data"
-        subtitle="Categories, sub-categories & units — the shared reference tables both apps use."
-      />
+      <h2 className="text-2xl font-bold text-slate-900">Masterdata</h2>
+      <p className="mb-4 mt-1 text-sm text-slate-500">
+        One place to manage items, suppliers, categories and sub-categories.
+      </p>
 
-      {isAdmin && (
-        <Card className="mb-4 p-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (catName.trim()) addCategory.mutate(catName, { onSuccess: () => setCatName("") });
-              }}
-            >
-              <input className={`${inp} flex-1`} placeholder="New category" value={catName} onChange={(e) => setCatName(e.target.value)} />
-              <Btn variant="primary" type="submit">Add</Btn>
-            </form>
-
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (subCatId && subName.trim())
-                  addSub.mutate({ categoryId: subCatId, name: subName }, { onSuccess: () => setSubName("") });
-              }}
-            >
-              <select className={inp} value={subCatId} onChange={(e) => setSubCatId(e.target.value)}>
-                <option value="">Category…</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <input className={`${inp} flex-1`} placeholder="New sub-category" value={subName} onChange={(e) => setSubName(e.target.value)} />
-              <Btn variant="primary" type="submit">Add</Btn>
-            </form>
-
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (unitCode.trim()) addUnit.mutate({ code: unitCode }, { onSuccess: () => setUnitCode("") });
-              }}
-            >
-              <input className={`${inp} flex-1`} placeholder="New unit code (e.g. btl)" value={unitCode} onChange={(e) => setUnitCode(e.target.value)} />
-              <Btn variant="primary" type="submit">Add</Btn>
-            </form>
-          </div>
-        </Card>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Categories & sub-categories" count={categories.length}>
-          <div className="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto">
-            {categories.length === 0 ? (
-              <Empty>No categories yet.</Empty>
-            ) : (
-              categories.map((c) => (
-                <div key={c.id} className="px-4 py-3">
-                  <div className="font-medium text-slate-800">{c.name}</div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {(subsByCat.get(c.id) || []).map((s) => (
-                      <span key={s.id} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                        {s.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Panel>
-
-        <div className="space-y-4">
-          <Panel title="Units" count={units.length}>
-            <div className="max-h-56 overflow-y-auto p-3">
-              {units.length === 0 ? (
-                <Empty>No units yet.</Empty>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {units.map((u) => (
-                    <span key={u.id} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs" title={u.dimension}>
-                      <span className="font-semibold">{u.code}</span>
-                      {u.name ? <span className="text-slate-400"> · {u.name}</span> : null}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="Unit conversions" count={conversions.length}>
-            <div className="max-h-56 overflow-y-auto p-3 text-sm">
-              {conversions.length === 0 ? (
-                <Empty>No conversions defined.</Empty>
-              ) : (
-                <ul className="space-y-1 text-slate-600">
-                  {conversions.map((c) => (
-                    <li key={c.id} className="font-mono text-xs">
-                      1 {c.from_unit_id?.slice(0, 4)} = {c.factor} {c.to_unit_id?.slice(0, 4)}
-                      {c.item_id ? " (per-item)" : " (global)"}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Panel>
-        </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition ${
+              tab === t.key
+                ? "border-teal-600 bg-teal-600 text-white"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+
+      {tab === "items" && <Items isAdmin={isAdmin} />}
+      {tab === "suppliers" && <Suppliers isAdmin={isAdmin} />}
+      {tab === "categories" && <CategoriesManager isAdmin={isAdmin} />}
+      {tab === "subcategories" && <SubCategoriesManager isAdmin={isAdmin} />}
     </div>
   );
 }

@@ -102,4 +102,16 @@ export class ItemRepository {
   static async setActive(itemId, isActive) {
     return ItemRepository.update(itemId, { isActive: !!isActive });
   }
+
+  static async remove(itemId) {
+    unwrap(
+      await withTimeout(
+        supabase.from("items").delete().eq("id", itemId),
+        15000,
+        "Deleting item",
+      ),
+      "Deleting item",
+    );
+    return true;
+  }
 }
