@@ -1,4 +1,9 @@
 -- ============================================================================
+-- ⚠ SUPERSEDED — use import_ksef_mappings_full.sql instead.
+-- That file cleans the table and loads ALL mappings + PACK SIZE + supplier from
+-- the live old DB. This file only has item->ksef text pairs from the repo CSV
+-- (pack_size defaults to 1) and is kept for reference / offline fallback.
+-- ============================================================================
 -- Import existing KSeF mappings (item_name -> ksef_item_name) into Supabase.
 -- Source: SupplyTracker/backend/data/old_ksef_mappings.csv  (338 unique pairs)
 --
