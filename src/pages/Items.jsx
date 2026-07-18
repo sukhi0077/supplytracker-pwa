@@ -127,7 +127,7 @@ export default function Items({ isAdmin }) {
       name: it.name,
       code: it.code,
       subCategoryId: it.subCategoryId ? String(it.subCategoryId) : "",
-      unitId: it.defaultUomId ? String(it.defaultUomId) : it.unitId ? String(it.unitId) : "",
+      unitId: it.unitId ? String(it.unitId) : it.defaultUomId ? String(it.defaultUomId) : "",
       defaultVatRate: String(parseFloat(it.defaultVatRate ?? 23)),
       isActive: it.isActive,
       matchKeywords: it.matchKeywords ?? "",
@@ -140,15 +140,14 @@ export default function Items({ isAdmin }) {
     if (!form.subCategoryId) return setErr("Choose a sub-category.");
     if (!form.unitId) return setErr("Choose a unit.");
     const sub = subs.find((s) => String(s.id) === String(form.subCategoryId));
-    const unit = units.find((u) => String(u.id) === String(form.unitId));
+    // Normalised write: FK ids only. category_id is derived from the chosen
+    // sub-category so the two stay consistent.
     const patch = {
       name: form.name.trim(),
       code: form.code.trim(),
-      category: sub ? catNameById.get(sub.category_id) || "" : "",
-      subCategory: sub?.name || "",
+      categoryId: sub ? sub.category_id : null,
       subCategoryId: form.subCategoryId,
-      defaultUnit: unit?.code || "szt",
-      defaultUomId: form.unitId,
+      unitId: form.unitId,
       defaultVatRate: form.defaultVatRate || "23",
       isActive: form.isActive,
       matchKeywords: form.matchKeywords.trim(),

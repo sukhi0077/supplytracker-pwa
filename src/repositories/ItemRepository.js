@@ -1,21 +1,25 @@
 // src/repositories/ItemRepository.js
-// The catalogue lives in the shared `items` table. SupplyTracker's extra fields
-// (default_uom_id, primary_supplier_id, notes, reorder_frequency_days,
-// last_ordered_at) were added by supabase/schema.sql. We map Django-style names
-// to the shared columns at this boundary:
-//   default_unit  <-> unit          default_vat_rate <-> vat_rate
-//   is_active     <-> active        sub_category(FK) <-> sub_category_id
+// The catalogue lives in the shared `items` table. Category / sub-category / unit
+// are NORMALISED: items store category_id / sub_category_id / unit_id FKs only
+// (the old text columns were dropped). We read the display names by joining the
+// master tables, and write the FK ids.
 import { supabase, withTimeout, unwrap, toTs } from "../supabase.js";
+
+// Joins: disambiguate the FK with the column-name hint (items has more than one
+// FK into some of these, e.g. unit_id vs default_uom_id -> units).
+const SELECT =
+  "*, cat:categories!category_id(name), sub:sub_categories!sub_category_id(name,category_id), uom:units!unit_id(code)";
 
 function fromRow(r) {
   return {
     id: r.id,
     code: r.code || "",
     name: r.name || "",
-    category: r.category || "",
-    subCategory: r.sub_category || "",
+    category: r.cat?.name || "",
+    subCategory: r.sub?.name || "",
+    categoryId: r.category_id || null,
     subCategoryId: r.sub_category_id || null,
-    defaultUnit: r.unit || "",
+    defaultUnit: r.uom?.code || "",
     unitId: r.unit_id || null,
     defaultUomId: r.default_uom_id || null,
     defaultVatRate: r.vat_rate ?? null,
@@ -34,10 +38,9 @@ function toRow(obj = {}) {
   const map = {
     code: "code",
     name: "name",
-    category: "category",
-    subCategory: "sub_category",
+    categoryId: "category_id",
     subCategoryId: "sub_category_id",
-    defaultUnit: "unit",
+    unitId: "unit_id",
     defaultUomId: "default_uom_id",
     defaultVatRate: "vat_rate",
     matchKeywords: "match_keywords",
@@ -59,7 +62,7 @@ export class ItemRepository {
   static async getAll() {
     const data = unwrap(
       await withTimeout(
-        supabase.from("items").select("*").order("name", { ascending: true }),
+        supabase.from("items").select(SELECT).order("name", { ascending: true }),
         15000,
         "Loading items",
       ),

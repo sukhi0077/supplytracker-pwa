@@ -55,19 +55,21 @@ export class MasterDataRepository {
   }
 
   static async getUnitConversions() {
-    return (
-      unwrap(
-        await withTimeout(
-          supabase
-            .from("unit_conversions")
-            .select("id,from_unit_id,to_unit_id,factor,item_id")
-            .order("item_id", { ascending: true, nullsFirst: true }),
-          15000,
-          "Loading unit conversions",
-        ),
+    // Optional table — don't let its absence break the whole master-data page.
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from("unit_conversions")
+          .select("id,from_unit_id,to_unit_id,factor,item_id")
+          .order("item_id", { ascending: true, nullsFirst: true }),
+        15000,
         "Loading unit conversions",
-      ) || []
-    );
+      );
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
   }
 
   static async getAll() {

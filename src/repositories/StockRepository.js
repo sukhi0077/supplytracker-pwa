@@ -16,7 +16,7 @@ export class StockRepository {
       await withTimeout(
         supabase
           .from("stock_levels")
-          .select("*, item:items(name, unit, code, active)")
+          .select("*, item:items(name, code, active, uom:units!unit_id(code))")
           .order("current_qty", { ascending: true }),
         15000,
         "Loading stock",
@@ -26,7 +26,7 @@ export class StockRepository {
     return (data || []).map((r) => ({
       ...r,
       itemName: r.item?.name || "",
-      itemUnit: r.item?.unit || "",
+      itemUnit: r.item?.uom?.code || "",
       itemCode: r.item?.code || "",
       status: stockStatus(r),
     }));

@@ -8,7 +8,7 @@ export class InvoiceDetailRepository {
       await withTimeout(
         supabase
           .from("invoice_details")
-          .select("*, supplier:suppliers(name), item:items(name, unit)")
+          .select("*, supplier:suppliers(name), item:items(name, uom:units!unit_id(code))")
           .order("order_date", { ascending: false })
           .limit(limit),
         15000,
@@ -23,7 +23,7 @@ export class InvoiceDetailRepository {
       supplierName: r.supplier?.name || "",
       itemId: r.item_id,
       itemName: r.item?.name || "(unmapped)",
-      unit: r.item?.unit || "",
+      unit: r.item?.uom?.code || "",
       quantity: r.quantity,
       packSize: r.pack_size,
       unitPriceNet: r.unit_price_net,
