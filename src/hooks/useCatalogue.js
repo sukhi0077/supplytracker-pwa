@@ -9,6 +9,7 @@ import { InvoiceDetailRepository } from "../repositories/InvoiceDetailRepository
 import { KsefMappingRepository } from "../repositories/KsefMappingRepository.js";
 import { SalesRepository } from "../repositories/SalesRepository.js";
 import { StockRepository } from "../repositories/StockRepository.js";
+import { KsefJobRepository } from "../repositories/KsefJobRepository.js";
 
 // ---- queries ---------------------------------------------------------------
 export function useMasterData() {
@@ -44,6 +45,9 @@ export function useStockMovements() {
 }
 export function useSales(month) {
   return useQuery({ queryKey: ["sales", month || "all"], queryFn: () => SalesRepository.getAll({ month }) });
+}
+export function useKsefJobs() {
+  return useQuery({ queryKey: ["ksefJobs"], queryFn: () => KsefJobRepository.getRecent() });
 }
 
 // ---- small mutation helper -------------------------------------------------

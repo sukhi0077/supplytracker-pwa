@@ -12,6 +12,7 @@ import MasterData from "./pages/MasterData.jsx";
 import Invoices from "./pages/Invoices.jsx";
 import InvoiceDetails from "./pages/InvoiceDetails.jsx";
 import KsefMappings from "./pages/KsefMappings.jsx";
+import DownloadKsef from "./pages/DownloadKsef.jsx";
 import Stock from "./pages/Stock.jsx";
 import SalesReport from "./pages/SalesReport.jsx";
 
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="masterdata" element={<MasterData isAdmin={isAdmin} />} />
         <Route path="invoices" element={<Invoices isAdmin={isAdmin} />} />
         <Route path="invoice-details" element={<InvoiceDetails isAdmin={isAdmin} />} />
+        <Route path="download-ksef" element={<DownloadKsef isAdmin={isAdmin} />} />
         <Route path="ksef-mappings" element={<KsefMappings isAdmin={isAdmin} />} />
         <Route path="stock" element={<Stock isAdmin={isAdmin} />} />
         <Route path="sales-report" element={<SalesReport isAdmin={isAdmin} />} />

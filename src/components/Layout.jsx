@@ -7,6 +7,7 @@ const NAV = [
   { to: "/masterdata", label: "Master data" },
   { to: "/invoices", label: "Invoices" },
   { to: "/invoice-details", label: "Invoice details" },
+  { to: "/download-ksef", label: "Download KSeF" },
   { to: "/ksef-mappings", label: "KSeF mappings" },
   { to: "/stock", label: "Stock" },
   { to: "/sales-report", label: "Sales report" },
