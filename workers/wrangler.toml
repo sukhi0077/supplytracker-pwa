@@ -1,0 +1,36 @@
+# Cloudflare Worker for SupplyTracker's server-side integrations (KSeF + wFirma).
+#
+# It writes to the SAME Supabase Postgres the PWAs use, via the SERVICE-ROLE key
+# (which bypasses RLS — correct for a trusted backend job). Secrets are set with
+# `wrangler secret put <NAME>` and never committed.
+#
+# Deploy:   npm install && npx wrangler deploy
+# Secrets:  wrangler secret put SUPABASE_URL
+#           wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#           wrangler secret put KSEF_NIP
+#           wrangler secret put KSEF_TOKEN
+#           wrangler secret put WFIRMA_LOGIN
+#           wrangler secret put WFIRMA_PASSWORD
+
+name = "supplytracker-workers"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# --- KSeF environment (non-secret config) ---
+[vars]
+KSEF_BASE_URL = "https://api-test.ksef.mf.gov.pl/api/v2"   # prod: https://api.ksef.mf.gov.pl/api/v2
+KSEF_ENV = "test"
+# Set true to also create a purchase_in stock movement per invoice line that maps
+# to a catalogue item (mirrors SupplyTracker's stock behaviour).
+KSEF_WRITE_STOCK = "false"
+
+# --- Scheduled runs ---
+# 06:20 daily: pull the last few days of KSeF invoices.
+# 06:40 daily: sync wFirma payment statuses.
+[triggers]
+crons = ["20 6 * * *", "40 6 * * *"]
+
+# Bump CPU only if you move to the paid plan and need bigger batches.
+# [limits]
+# cpu_ms = 300000

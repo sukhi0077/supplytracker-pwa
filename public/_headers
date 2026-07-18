@@ -1,0 +1,12 @@
+# Cloudflare Pages headers.
+#
+# Never long-cache the files that drive PWA updates, so a new deploy is picked
+# up on the next open/reload. Hashed /assets/* files keep their long cache.
+/sw.js
+  Cache-Control: no-cache
+/registerSW.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
