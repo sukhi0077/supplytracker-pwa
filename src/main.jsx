@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App.jsx";
 import "./index.css";
 
+// Build marker — check the browser console to confirm the latest bundle is live.
+console.info("SupplyTracker build: normalized-catalogue-2 (client-side name resolution)");
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

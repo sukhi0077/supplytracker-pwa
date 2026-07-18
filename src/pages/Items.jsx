@@ -42,11 +42,34 @@ export default function Items({ isAdmin }) {
   const update = useUpdateItem();
   const remove = useRemoveItem();
 
-  const rows = items || [];
+  const rawItems = items || [];
   const cats = master?.categories || [];
   const subs = master?.subCategories || [];
   const units = master?.units || [];
   const catNameById = useMemo(() => new Map(cats.map((c) => [c.id, c.name])), [cats]);
+  const subById = useMemo(() => new Map(subs.map((s) => [s.id, s])), [subs]);
+  const unitCodeById = useMemo(() => new Map(units.map((u) => [u.id, u.code])), [units]);
+
+  // Items store only FK ids (category/sub-category/unit are normalised). Resolve
+  // the display names from the master tables here, so nothing depends on a join.
+  const rows = useMemo(
+    () =>
+      rawItems.map((it) => {
+        const sub = it.subCategoryId ? subById.get(it.subCategoryId) : null;
+        const catName = it.categoryId
+          ? catNameById.get(it.categoryId)
+          : sub
+            ? catNameById.get(sub.category_id)
+            : "";
+        return {
+          ...it,
+          category: catName || "",
+          subCategory: sub?.name || "",
+          defaultUnit: (it.unitId && unitCodeById.get(it.unitId)) || "",
+        };
+      }),
+    [rawItems, subById, catNameById, unitCodeById],
+  );
 
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);

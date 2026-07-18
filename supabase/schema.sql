@@ -35,6 +35,11 @@ alter table public.items add column if not exists reorder_frequency_days int;
 alter table public.items add column if not exists last_ordered_at        date;
 alter table public.items add column if not exists primary_supplier_id    uuid references public.suppliers(id) on delete set null;
 alter table public.items add column if not exists notes                  text not null default '';
+-- Two-level active flag: `active` is the MASTER flag (owned here, in SupplyTracker
+-- — disabling hides the item in BOTH apps). `osp_active` is Order & Stock's LOCAL
+-- disable (owned by that app — never touched here). SupplyTracker reads/writes
+-- only `active`.
+alter table public.items add column if not exists osp_active             boolean not null default true;
 create index if not exists items_primary_supplier_idx on public.items (primary_supplier_id);
 create index if not exists items_default_uom_idx      on public.items (default_uom_id);
 

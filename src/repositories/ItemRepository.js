@@ -5,21 +5,21 @@
 // master tables, and write the FK ids.
 import { supabase, withTimeout, unwrap, toTs } from "../supabase.js";
 
-// Joins: disambiguate the FK with the column-name hint (items has more than one
-// FK into some of these, e.g. unit_id vs default_uom_id -> units).
-const SELECT =
-  "*, cat:categories!category_id(name), sub:sub_categories!sub_category_id(name,category_id), uom:units!unit_id(code)";
-
+// We read items with `select("*")` (never errors on missing columns) and keep
+// the FK ids. Category / sub-category / unit NAMES are resolved on the client
+// from the master tables (see Items page), so nothing depends on PostgREST embed
+// syntax or on columns that a given DB may or may not have.
 function fromRow(r) {
   return {
     id: r.id,
     code: r.code || "",
     name: r.name || "",
-    category: r.cat?.name || "",
-    subCategory: r.sub?.name || "",
+    // Names are filled in by the page from master data; ids are the source.
+    category: "",
+    subCategory: "",
     categoryId: r.category_id || null,
     subCategoryId: r.sub_category_id || null,
-    defaultUnit: r.uom?.code || "",
+    defaultUnit: "",
     unitId: r.unit_id || null,
     defaultUomId: r.default_uom_id || null,
     defaultVatRate: r.vat_rate ?? null,
@@ -62,7 +62,7 @@ export class ItemRepository {
   static async getAll() {
     const data = unwrap(
       await withTimeout(
-        supabase.from("items").select(SELECT).order("name", { ascending: true }),
+        supabase.from("items").select("*").order("name", { ascending: true }),
         15000,
         "Loading items",
       ),
