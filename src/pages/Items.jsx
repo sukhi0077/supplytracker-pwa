@@ -1,7 +1,7 @@
 // src/pages/Items.jsx — redesigned to match the original SupplyTracker Items
 // screen: inline add/edit form, category/sub-category filter chips, sortable
 // table with per-column filters, Edit/Delete. Backed by Supabase.
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   useItems,
   useMasterData,
@@ -77,7 +77,6 @@ export default function Items({ isAdmin }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const formOpen = adding || editId != null;
 
   // Sub-categories grouped by parent category for the form's <optgroup> select.
   const subcatGroups = useMemo(() => {
@@ -201,13 +200,65 @@ export default function Items({ isAdmin }) {
     }
   };
 
+  // Shared form fields, reused by the top "add" panel and the inline "edit" row.
+  const formFields = (mode) => (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      <Field label="Item name *">
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inp} />
+      </Field>
+      <Field label="Code (auto if blank)">
+        <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="ITM-…" className={inp} />
+      </Field>
+      <Field label="Sub-category *">
+        <select value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} className={inp}>
+          <option value="">— select —</option>
+          {subcatGroups.map((g) => (
+            <optgroup key={g.category} label={g.category}>
+              {g.subs.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </Field>
+      <Field label="Unit *">
+        <select value={form.unitId} onChange={(e) => setForm({ ...form, unitId: e.target.value })} className={inp}>
+          <option value="">— select —</option>
+          {units.map((u) => (
+            <option key={u.id} value={u.id}>{u.code}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="VAT %">
+        <input type="number" step="0.01" value={form.defaultVatRate} onChange={(e) => setForm({ ...form, defaultVatRate: e.target.value })} className={inp} />
+      </Field>
+      <Field label="Active">
+        <label className="flex h-8 items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
+          {form.isActive ? "Active" : "Inactive"}
+        </label>
+      </Field>
+      <Field label="Match keywords — Polish words on KSeF invoices that map here (comma/space separated)" full>
+        <input value={form.matchKeywords} onChange={(e) => setForm({ ...form, matchKeywords: e.target.value })} placeholder="e.g. mięta, mieta, świeża, cięta" className={inp} />
+      </Field>
+      <div className="col-span-full flex gap-2">
+        <button onClick={save} disabled={busy} className={accentBtn}>
+          {busy ? "Saving…" : mode === "edit" ? "Save changes" : "Save item"}
+        </button>
+        <button onClick={close} className="rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-900">Items</h2>
         {isAdmin && (
-          <button onClick={() => (formOpen ? close() : openAdd())} className={accentBtn}>
-            {formOpen ? "Close" : "+ Add item"}
+          <button onClick={() => (adding ? close() : openAdd())} className={accentBtn}>
+            {adding ? "Close" : "+ Add item"}
           </button>
         )}
       </div>
@@ -215,54 +266,11 @@ export default function Items({ isAdmin }) {
       <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
         {err && <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 
-        {formOpen && (
+        {/* Top panel is for ADDING a new item only. */}
+        {adding && (
           <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 font-semibold text-slate-700">{editId == null ? "New item" : "Edit item"}</div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              <Field label="Item name *">
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inp} />
-              </Field>
-              <Field label="Code (auto if blank)">
-                <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="ITM-…" className={inp} />
-              </Field>
-              <Field label="Sub-category *">
-                <select value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} className={inp}>
-                  <option value="">— select —</option>
-                  {subcatGroups.map((g) => (
-                    <optgroup key={g.category} label={g.category}>
-                      {g.subs.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Unit *">
-                <select value={form.unitId} onChange={(e) => setForm({ ...form, unitId: e.target.value })} className={inp}>
-                  <option value="">— select —</option>
-                  {units.map((u) => (
-                    <option key={u.id} value={u.id}>{u.code}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="VAT %">
-                <input type="number" step="0.01" value={form.defaultVatRate} onChange={(e) => setForm({ ...form, defaultVatRate: e.target.value })} className={inp} />
-              </Field>
-              <Field label="Active">
-                <label className="flex h-8 items-center gap-2 text-sm">
-                  <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
-                  {form.isActive ? "Active" : "Inactive"}
-                </label>
-              </Field>
-              <Field label="Match keywords — Polish words on KSeF invoices that map here (comma/space separated)" full>
-                <input value={form.matchKeywords} onChange={(e) => setForm({ ...form, matchKeywords: e.target.value })} placeholder="e.g. mięta, mieta, świeża, cięta" className={inp} />
-              </Field>
-              <div className="col-span-full">
-                <button onClick={save} disabled={busy} className={accentBtn}>
-                  {busy ? "Saving…" : editId == null ? "Save item" : "Save changes"}
-                </button>
-              </div>
-            </div>
+            <div className="mb-2 font-semibold text-slate-700">New item</div>
+            {formFields("add")}
           </div>
         )}
 
@@ -353,28 +361,46 @@ export default function Items({ isAdmin }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sorted.map((i) => (
-                  <tr key={i.id} className={i.isActive ? "" : "opacity-55"}>
-                    <td className="px-3 py-2 font-mono text-xs text-slate-500">{i.code}</td>
-                    <td className="px-3 py-2 font-medium text-slate-900">{i.name}</td>
-                    <td className="px-3 py-2 text-slate-600">{i.category}</td>
-                    <td className="px-3 py-2 text-slate-600">{i.subCategory}</td>
-                    <td className="px-3 py-2 text-slate-600">{i.defaultUnit}</td>
-                    <td className="max-w-[200px] truncate px-3 py-2 text-xs text-slate-400" title={i.matchKeywords || ""}>
-                      {i.matchKeywords || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{parseFloat(i.defaultVatRate ?? 0)}</td>
-                    <td className="px-3 py-2">{i.isActive ? "✓" : "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">
-                      {isAdmin && (
-                        <>
-                          <button onClick={() => openEdit(i)} className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50">Edit</button>{" "}
-                          <button onClick={() => doRemove(i)} disabled={busy} className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
-                        </>
+                {sorted.map((i) => {
+                  const editingThis = editId === i.id;
+                  return (
+                    <Fragment key={i.id}>
+                      <tr className={`${i.isActive ? "" : "opacity-55"} ${editingThis ? "bg-teal-50" : ""}`}>
+                        <td className="px-3 py-2 font-mono text-xs text-slate-500">{i.code}</td>
+                        <td className="px-3 py-2 font-medium text-slate-900">{i.name}</td>
+                        <td className="px-3 py-2 text-slate-600">{i.category}</td>
+                        <td className="px-3 py-2 text-slate-600">{i.subCategory}</td>
+                        <td className="px-3 py-2 text-slate-600">{i.defaultUnit}</td>
+                        <td className="max-w-[200px] truncate px-3 py-2 text-xs text-slate-400" title={i.matchKeywords || ""}>
+                          {i.matchKeywords || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">{parseFloat(i.defaultVatRate ?? 0)}</td>
+                        <td className="px-3 py-2">{i.isActive ? "✓" : "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right">
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => (editingThis ? close() : openEdit(i))}
+                                className={`rounded border px-2 py-0.5 text-xs ${editingThis ? "border-teal-400 bg-teal-100 text-teal-800" : "border-slate-300 bg-white hover:bg-slate-50"}`}
+                              >
+                                {editingThis ? "Editing" : "Edit"}
+                              </button>{" "}
+                              <button onClick={() => doRemove(i)} disabled={busy} className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                      {editingThis && (
+                        <tr className="bg-teal-50/50">
+                          <td colSpan={9} className="px-3 pb-4 pt-1">
+                            <div className="mb-2 text-sm font-semibold text-slate-700">Edit item</div>
+                            {formFields("edit")}
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
