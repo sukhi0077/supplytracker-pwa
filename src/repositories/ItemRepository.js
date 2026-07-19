@@ -1,14 +1,15 @@
 // src/repositories/ItemRepository.js
-// The catalogue lives in the shared `items` table. Category / sub-category / unit
-// are NORMALISED: items store category_id / sub_category_id / unit_id FKs only
-// (the old text columns were dropped). We read the display names by joining the
-// master tables, and write the FK ids.
+// The catalogue lives in the shared `items` table. Category / sub-category /
+// unit / supplier are NORMALISED: items store category_id / sub_category_id /
+// unit_id / primary_supplier_id FKs only (the old text columns and the redundant
+// default_uom_id / uom_code were dropped). We read display names by joining, and
+// write the FK ids.
 import { supabase, withTimeout, unwrap, toTs } from "../supabase.js";
 
-// We read items with `select("*")` (never errors on missing columns) and keep
-// the FK ids. Category / sub-category / unit NAMES are resolved on the client
-// from the master tables (see Items page), so nothing depends on PostgREST embed
-// syntax or on columns that a given DB may or may not have.
+// Embed the supplier name via the primary_supplier_id FK; category / sub-category
+// / unit names are still resolved on the Items page from master data (by id).
+const SELECT = "*, supplier:suppliers!primary_supplier_id(name)";
+
 function fromRow(r) {
   return {
     id: r.id,
@@ -21,12 +22,11 @@ function fromRow(r) {
     subCategoryId: r.sub_category_id || null,
     defaultUnit: "",
     unitId: r.unit_id || null,
-    defaultUomId: r.default_uom_id || null,
     defaultVatRate: r.vat_rate ?? null,
     matchKeywords: r.match_keywords || "",
     reorderFrequencyDays: r.reorder_frequency_days ?? null,
     lastOrderedAt: r.last_ordered_at || null,
-    supplier: r.supplier || "",
+    supplier: r.supplier?.name || "",
     primarySupplierId: r.primary_supplier_id || null,
     notes: r.notes || "",
     isActive: r.active !== false,
@@ -35,18 +35,17 @@ function fromRow(r) {
 }
 
 function toRow(obj = {}) {
+  // `supplier` is derived (via primary_supplier_id) and never written directly.
   const map = {
     code: "code",
     name: "name",
     categoryId: "category_id",
     subCategoryId: "sub_category_id",
     unitId: "unit_id",
-    defaultUomId: "default_uom_id",
     defaultVatRate: "vat_rate",
     matchKeywords: "match_keywords",
     reorderFrequencyDays: "reorder_frequency_days",
     lastOrderedAt: "last_ordered_at",
-    supplier: "supplier",
     primarySupplierId: "primary_supplier_id",
     notes: "notes",
     isActive: "active",
@@ -62,7 +61,7 @@ export class ItemRepository {
   static async getAll() {
     const data = unwrap(
       await withTimeout(
-        supabase.from("items").select("*").order("name", { ascending: true }),
+        supabase.from("items").select(SELECT).order("name", { ascending: true }),
         15000,
         "Loading items",
       ),

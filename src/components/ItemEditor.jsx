@@ -12,7 +12,6 @@ const EMPTY = {
   defaultUnit: "szt",
   defaultVatRate: 23,
   reorderFrequencyDays: null,
-  supplier: "",
   primarySupplierId: null,
   matchKeywords: "",
   notes: "",
@@ -112,10 +111,7 @@ export default function ItemEditor({ open, onClose, item }) {
         <Field label="VAT %">
           <Num value={form.defaultVatRate} onChange={set("defaultVatRate")} min={0} max={100} />
         </Field>
-        <Field label="Supplier (text)">
-          <Text value={form.supplier} onChange={set("supplier")} placeholder="Primary supplier name" />
-        </Field>
-        <Field label="Primary supplier (linked)">
+        <Field label="Primary supplier">
           <Select
             value={form.primarySupplierId}
             onChange={set("primarySupplierId")}

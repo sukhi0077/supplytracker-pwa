@@ -27,10 +27,11 @@
 
 -- ---- items: SupplyTracker's catalogue fields --------------------------------
 -- Shared already has: code, name, category/sub_category/unit (+ *_id FKs),
--- uom_code, vat_rate (default 23), match_keywords, supplier (text), active.
--- Map at the app boundary: default_unit -> unit, default_vat_rate -> vat_rate,
--- is_active -> active, sub_category (FK) -> sub_category_id.
-alter table public.items add column if not exists default_uom_id         uuid references public.units(id);
+-- vat_rate (default 23), match_keywords, active.
+-- Map at the app boundary: default_unit -> unit_id, default_vat_rate -> vat_rate,
+-- is_active -> active, sub_category (FK) -> sub_category_id, primary supplier ->
+-- primary_supplier_id. UNIT IS NORMALISED to the single items.unit_id FK — the
+-- old default_uom_id / uom_code columns are removed (see the drop block below).
 alter table public.items add column if not exists reorder_frequency_days int;
 alter table public.items add column if not exists last_ordered_at        date;
 alter table public.items add column if not exists primary_supplier_id    uuid references public.suppliers(id) on delete set null;
@@ -41,7 +42,22 @@ alter table public.items add column if not exists notes                  text no
 -- only `active`.
 alter table public.items add column if not exists osp_active             boolean not null default true;
 create index if not exists items_primary_supplier_idx on public.items (primary_supplier_id);
-create index if not exists items_default_uom_idx      on public.items (default_uom_id);
+
+-- Drop the redundant unit columns (self-healing if order-stock's schema.sql
+-- hasn't been re-run yet): fold any value into the single items.unit_id first.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema='public' and table_name='items' and column_name='default_uom_id') then
+    update public.items set unit_id = default_uom_id where unit_id is null and default_uom_id is not null;
+    drop index if exists public.items_default_uom_idx;
+    alter table public.items drop column default_uom_id;
+  end if;
+  if exists (select 1 from information_schema.columns
+             where table_schema='public' and table_name='items' and column_name='uom_code') then
+    alter table public.items drop column uom_code;
+  end if;
+end $$;
 
 -- ---- suppliers: SupplyTracker's operational fields --------------------------
 -- Shared already has: name (unique), active, nip, ksef_name.
@@ -218,6 +234,14 @@ create table if not exists public.sales_records (
 );
 create index if not exists sales_records_month_idx      on public.sales_records (month);
 create index if not exists sales_records_month_cat_idx  on public.sales_records (month, category);
+-- Best-effort link to the catalogue. Sales rows are an EXTERNAL POS upload whose
+-- (month, category, item_name) stays the natural key + raw label; item_id adds a
+-- normalised FK where the uploaded item_name matches a catalogue item by name.
+alter table public.sales_records add column if not exists item_id uuid references public.items(id) on delete set null;
+create index if not exists sales_records_item_idx on public.sales_records (item_id);
+update public.sales_records sr set item_id = i.id
+  from public.items i
+  where sr.item_id is null and lower(btrim(sr.item_name)) = lower(i.name);
 
 -- ---- KSeF integration state (for the deferred Cloudflare Worker phase) ------
 -- ksef_credentials / ksef_auth_tokens hold SECRETS. RLS is enabled with NO

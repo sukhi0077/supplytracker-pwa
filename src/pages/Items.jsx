@@ -149,7 +149,7 @@ export default function Items({ isAdmin }) {
       name: it.name,
       code: it.code,
       subCategoryId: it.subCategoryId ? String(it.subCategoryId) : "",
-      unitId: it.unitId ? String(it.unitId) : it.defaultUomId ? String(it.defaultUomId) : "",
+      unitId: it.unitId ? String(it.unitId) : "",
       defaultVatRate: String(parseFloat(it.defaultVatRate ?? 23)),
       isActive: it.isActive,
       matchKeywords: it.matchKeywords ?? "",
