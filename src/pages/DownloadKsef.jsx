@@ -1,9 +1,10 @@
 // src/pages/DownloadKsef.jsx
-// Trigger a KSeF invoice fetch and view the run history. In the PWA the actual
-// fetch runs in the Cloudflare Worker (KSeF credentials live there as Worker
-// Secrets, never in the browser). This page kicks off the Worker's manual
-// endpoint and shows the ksef_fetch_jobs history.
-import { useState } from "react";
+// Enter your KSeF NIP + authorization token, pick a date range, and fetch
+// supplier invoices — same idea as the original SupplyTracker downloader. The
+// actual KSeF calls run in the Cloudflare Worker (authenticated by your signed-in
+// admin session); the NIP + token are sent to it per run. Fetch history comes
+// from ksef_fetch_jobs.
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useKsefJobs } from "../hooks/useCatalogue.js";
 import { KsefJobRepository } from "../repositories/KsefJobRepository.js";
@@ -15,34 +16,75 @@ const today = () => iso(new Date());
 const daysAgo = (n) => iso(new Date(Date.now() - n * 86400000));
 
 const WORKER_URL = import.meta.env.VITE_KSEF_WORKER_URL || "";
+const LS = "ksef.creds.v1";
 
 export default function DownloadKsef({ isAdmin }) {
   const jobs = useKsefJobs();
   const qc = useQueryClient();
 
-  const [env, setEnv] = useState("test");
+  const [environment, setEnvironment] = useState("test");
+  const [nip, setNip] = useState("");
+  const [token, setToken] = useState("");
+  const [remember, setRemember] = useState(false);
   const [from, setFrom] = useState(daysAgo(7));
   const [to, setTo] = useState(today());
   const [updateExisting, setUpdateExisting] = useState(false);
-  const [secret, setSecret] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
+  const [note, setNote] = useState("");
 
-  const run = async () => {
+  // Restore remembered creds on this device.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS) || "null");
+      if (saved) {
+        setNip(saved.nip || "");
+        setToken(saved.token || "");
+        setEnvironment(saved.environment || "test");
+        setRemember(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persist = (on) => {
+    setRemember(on);
+    if (on) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
+    else localStorage.removeItem(LS);
+  };
+
+  const call = async (path) => {
     setError("");
     setSummary(null);
+    setNote("");
     if (!WORKER_URL) return setError("KSeF Worker URL is not configured (set VITE_KSEF_WORKER_URL).");
-    setBusy(true);
+    if (!nip.trim() || !token.trim()) return setError("Enter your NIP and KSeF token.");
+    setBusy(path);
     try {
-      const res = await KsefJobRepository.runFetch({ workerUrl: WORKER_URL, secret, from, to, updateExisting });
-      setSummary(res);
-      qc.invalidateQueries({ queryKey: ["ksefJobs"] });
-      qc.invalidateQueries({ queryKey: ["invoices"] });
+      const res = await KsefJobRepository.runFetch({
+        workerUrl: WORKER_URL,
+        path,
+        from,
+        to,
+        updateExisting,
+        nip: nip.trim(),
+        token: token.trim(),
+        environment,
+      });
+      if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
+      if (path === "/auth-test") {
+        setNote(res.ok ? "✓ Signed in to KSeF successfully." : "KSeF login did not return a token.");
+      } else {
+        setSummary(res);
+        qc.invalidateQueries({ queryKey: ["ksefJobs"] });
+        qc.invalidateQueries({ queryKey: ["invoices"] });
+      }
     } catch (e) {
-      setError(e.message || "Fetch failed.");
+      setError(e.message || "Request failed.");
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
 
@@ -50,7 +92,7 @@ export default function DownloadKsef({ isAdmin }) {
     <div>
       <PageHeader
         title="Download KSeF"
-        subtitle="Fetch supplier invoices from KSeF. Runs in the Cloudflare Worker; credentials live there as secrets."
+        subtitle="Provide your NIP and KSeF token, then fetch supplier invoices."
       />
 
       {isAdmin ? (
@@ -58,15 +100,15 @@ export default function DownloadKsef({ isAdmin }) {
           {!WORKER_URL && (
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               The KSeF Worker isn't wired up yet. Deploy <code>workers/</code> and set{" "}
-              <code>VITE_KSEF_WORKER_URL</code> to its URL. It also runs automatically on a daily cron —
-              this page is for on-demand runs and history.
+              <code>VITE_KSEF_WORKER_URL</code> to its URL.
             </div>
           )}
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="Environment">
               <select
-                value={env}
-                onChange={(e) => setEnv(e.target.value)}
+                value={environment}
+                onChange={(e) => setEnvironment(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
               >
                 <option value="test">test</option>
@@ -74,32 +116,56 @@ export default function DownloadKsef({ isAdmin }) {
                 <option value="prod">prod</option>
               </select>
             </Field>
+            <Field label="NIP">
+              <Text value={nip} onChange={setNip} placeholder="1234567890" />
+            </Field>
+            <Field label="KSeF token" className="sm:col-span-2" hint="Your KSeF authorization token. Encrypted in transit; used only for this run.">
+              <Text type="password" value={token} onChange={setToken} placeholder="••••••••" />
+            </Field>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="From">
               <Text type="date" value={from} onChange={setFrom} />
             </Field>
             <Field label="To">
               <Text type="date" value={to} onChange={setTo} />
             </Field>
-            <Field label="Trigger secret" hint="Kept in memory only; matches the Worker's TRIGGER_SECRET.">
-              <Text type="password" value={secret} onChange={setSecret} placeholder="••••••" />
-            </Field>
           </div>
+
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={updateExisting} onChange={(e) => setUpdateExisting(e.target.checked)} />
               Update existing invoices
             </label>
-            <Btn variant="primary" onClick={run} disabled={busy || !WORKER_URL}>
-              {busy ? "Fetching…" : "Run KSeF fetch"}
-            </Btn>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={remember} onChange={(e) => persist(e.target.checked)} />
+              Remember NIP &amp; token on this device
+            </label>
+            <div className="ml-auto flex gap-2">
+              <Btn onClick={() => call("/auth-test")} disabled={!!busy || !WORKER_URL}>
+                {busy === "/auth-test" ? "Checking…" : "Test login"}
+              </Btn>
+              <Btn variant="primary" onClick={() => call("/run/ksef")} disabled={!!busy || !WORKER_URL}>
+                {busy === "/run/ksef" ? "Fetching…" : "Fetch invoices"}
+              </Btn>
+            </div>
           </div>
 
           {error && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+          {note && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}
           {summary && (
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               Done — found {summary.found ?? "?"}, created {summary.created ?? 0}, updated {summary.updated ?? 0},
               skipped {summary.skipped ?? 0}
               {summary.errors?.length ? `, ${summary.errors.length} error(s)` : ""}.
+              {summary.errors?.length ? (
+                <div className="mt-1 max-h-24 overflow-y-auto text-xs text-red-700">
+                  {summary.errors.slice(0, 8).map((e, i) => (
+                    <div key={i}>{e}</div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
         </Card>

@@ -53,14 +53,24 @@ export async function runKsefFetch(
   db: SupabaseClient,
   dateFrom: string,
   dateTo: string,
-  opts: { updateExisting?: boolean } = {},
+  opts: {
+    updateExisting?: boolean;
+    creds?: { nip: string; token: string };
+    baseUrl?: string;
+    environment?: string;
+  } = {},
 ): Promise<FetchResult> {
   const res: FetchResult = { found: 0, created: 0, updated: 0, skipped: 0, errors: [] };
 
   // Job row (running).
   const { data: job } = await db
     .from("ksef_fetch_jobs")
-    .insert({ status: "running", environment: env.KSEF_ENV, date_from: dateFrom, date_to: dateTo })
+    .insert({
+      status: "running",
+      environment: opts.environment || env.KSEF_ENV,
+      date_from: dateFrom,
+      date_to: dateTo,
+    })
     .select("id")
     .single();
   const jobId = job?.id as string | undefined;
@@ -83,13 +93,14 @@ export async function runKsefFetch(
   };
 
   try {
-    // KSeF public key must be provided as an SPKI PEM secret (KSEF_PUBLIC_KEY_PEM).
-    const publicKeyPem = env.KSEF_PUBLIC_KEY_PEM || "";
+    // Credentials come from the request (UI) when provided, else from env
+    // secrets (used by the cron). The public key is fetched automatically unless
+    // a PEM is pinned via KSEF_PUBLIC_KEY_PEM.
     const client = new KsefClient({
-      baseUrl: env.KSEF_BASE_URL,
-      nip: env.KSEF_NIP,
-      token: env.KSEF_TOKEN,
-      publicKeyPem,
+      baseUrl: opts.baseUrl || env.KSEF_BASE_URL,
+      nip: opts.creds?.nip || env.KSEF_NIP,
+      token: opts.creds?.token || env.KSEF_TOKEN,
+      publicKeyPem: env.KSEF_PUBLIC_KEY_PEM || undefined,
     });
     await client.openSession();
 

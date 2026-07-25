@@ -22,25 +22,43 @@ The KSeF job is I/O-bound and chunked (one invoice per iteration), so it fits th
 budget, and 100k requests/day is far more than needed. Cron Triggers run it
 daily. See §4 and §8 of `../../supplytracker-pwa-PLAN.md`.
 
+## Two ways to run
+
+- **From the PWA (recommended):** the admin enters their **NIP + KSeF token** on
+  the Download KSeF page and clicks Fetch. Those are sent to the Worker per run,
+  and the call is authorized by the admin's Supabase session (no shared secret).
+  The KSeF encryption certificate is fetched automatically — no PEM to manage.
+- **Cron (unattended):** for the daily scheduled run, set `KSEF_NIP` + `KSEF_TOKEN`
+  as secrets so the Worker has credentials without a UI.
+
 ## Setup
 
 ```bash
 npm install
 npx wrangler login
 
-# Secrets (never committed):
+# Required secrets:
 wrangler secret put SUPABASE_URL
 wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+
+# Optional — only for the unattended CRON run (UI supplies these otherwise):
 wrangler secret put KSEF_NIP
 wrangler secret put KSEF_TOKEN
-wrangler secret put KSEF_PUBLIC_KEY_PEM      # KSeF public key, SPKI PEM
+wrangler secret put KSEF_PUBLIC_KEY_PEM      # only to PIN a cert; else auto-fetched
 wrangler secret put WFIRMA_LOGIN
 wrangler secret put WFIRMA_PASSWORD
-wrangler secret put TRIGGER_SECRET           # guards the manual HTTP endpoint
+
+# Optional — allows curl testing without a signed-in session:
+wrangler secret put TRIGGER_SECRET
 
 npm run typecheck
 npx wrangler deploy
 ```
+
+Endpoints: `POST /auth-test` (verify KSeF login only), `POST /run/ksef`,
+`POST /run/wfirma`. Body may include `{ "nip", "token", "environment" }`
+(environment = test | demo | prod). Auth = admin Supabase JWT **or**
+`x-trigger-secret`.
 
 Non-secret config (`KSEF_BASE_URL`, `KSEF_ENV`, `KSEF_WRITE_STOCK`, cron) is in
 `wrangler.toml`. Switch `KSEF_BASE_URL` to the prod host when ready.

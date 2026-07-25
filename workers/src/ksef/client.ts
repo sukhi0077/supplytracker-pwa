@@ -15,11 +15,13 @@
 // OpenAPI for your environment before going live. The crypto + control flow are
 // the parts that are hard to get right, and those are complete here.
 
+import { base64ToBytes, extractSpkiFromCert } from "./cert.js";
+
 export interface KsefConfig {
   baseUrl: string;
   nip: string;
   token: string;
-  publicKeyPem: string; // KSeF public key (SPKI PEM) used to encrypt the token
+  publicKeyPem?: string; // optional: SPKI PEM. If omitted, the cert is fetched.
 }
 
 export interface KsefSession {
@@ -56,6 +58,7 @@ function toBase64(buf: ArrayBuffer): string {
 export class KsefClient {
   private base: string;
   private session: KsefSession | null = null;
+  private encryptKey: CryptoKey | null = null;
 
   constructor(private cfg: KsefConfig) {
     this.base = cfg.baseUrl.replace(/\/$/, "");
@@ -83,15 +86,49 @@ export class KsefClient {
     throw new Error(`KSeF ${method} ${path} still rate-limited after retry`);
   }
 
-  // RSA-OAEP-SHA256 encrypt `${token}|${tsMillis}` with the KSeF public key.
-  private async encryptToken(tsMillis: number): Promise<string> {
-    const key = await crypto.subtle.importKey(
+  // Resolve KSeF's RSA public key: use the provided PEM, or fetch the
+  // KsefTokenEncryption certificate for this environment and pull its SPKI.
+  private async resolveEncryptKey(): Promise<CryptoKey> {
+    if (this.encryptKey) return this.encryptKey;
+    let spki: BufferSource;
+    if (this.cfg.publicKeyPem) {
+      spki = pemToDer(this.cfg.publicKeyPem);
+    } else {
+      const resp = await fetch(`${this.base}/security/public-key-certificates`);
+      if (!resp.ok) throw new Error(`public-key-certificates -> ${resp.status}`);
+      const data = (await resp.json()) as Record<string, unknown> | unknown[];
+      const items: unknown[] = Array.isArray(data)
+        ? data
+        : ((data as Record<string, unknown>).publicKeyCertificates as unknown[]) ||
+          ((data as Record<string, unknown>).certificates as unknown[]) ||
+          ((data as Record<string, unknown>).items as unknown[]) ||
+          [];
+      let certB64: string | undefined;
+      for (const raw of items) {
+        const c = raw as Record<string, unknown>;
+        let usage = (c.usage ?? c.usages ?? []) as string | string[];
+        if (typeof usage === "string") usage = [usage];
+        if (Array.isArray(usage) && usage.includes("KsefTokenEncryption")) {
+          certB64 = (c.certificate || c.publicKeyCertificate || c.value) as string | undefined;
+          if (certB64) break;
+        }
+      }
+      if (!certB64) throw new Error("No KsefTokenEncryption certificate in /security/public-key-certificates");
+      spki = extractSpkiFromCert(base64ToBytes(certB64));
+    }
+    this.encryptKey = await crypto.subtle.importKey(
       "spki",
-      pemToDer(this.cfg.publicKeyPem),
+      spki,
       { name: "RSA-OAEP", hash: "SHA-256" },
       false,
       ["encrypt"],
     );
+    return this.encryptKey;
+  }
+
+  // RSA-OAEP-SHA256 encrypt `${token}|${tsMillis}` with the KSeF public key.
+  private async encryptToken(tsMillis: number): Promise<string> {
+    const key = await this.resolveEncryptKey();
     const plaintext = new TextEncoder().encode(`${this.cfg.token}|${tsMillis}`);
     const ct = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, plaintext);
     return toBase64(ct);
