@@ -10,6 +10,7 @@ export interface Env {
   KSEF_ENV: string;
   KSEF_NIP: string;
   KSEF_TOKEN: string;
+  KSEF_PUBLIC_KEY_PEM: string;
   KSEF_WRITE_STOCK: string;
   WFIRMA_LOGIN: string;
   WFIRMA_PASSWORD: string;

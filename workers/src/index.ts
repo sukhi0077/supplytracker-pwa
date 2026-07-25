@@ -7,6 +7,7 @@
 import { db, type Env } from "./lib/supabase.js";
 import { runKsefFetch } from "./ksef/sync.js";
 import { runWfirmaSync } from "./wfirma/sync.js";
+import { KsefClient } from "./ksef/client.js";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number) => iso(new Date(Date.now() - n * 86400000));
@@ -28,17 +29,37 @@ export default {
   // --- Manual HTTP trigger (guarded by a shared secret) ---
   async fetch(req: Request, env: FullEnv): Promise<Response> {
     const url = new URL(req.url);
-    if (req.method !== "POST" || !url.pathname.startsWith("/run/")) {
-      return new Response("SupplyTracker workers. POST /run/ksef or /run/wfirma.", { status: 200 });
+    const isAction =
+      req.method === "POST" &&
+      (url.pathname.startsWith("/run/") || url.pathname === "/auth-test");
+    if (!isAction) {
+      return new Response(
+        "SupplyTracker workers. POST /auth-test, /run/ksef, or /run/wfirma.",
+        { status: 200 },
+      );
     }
     if (env.TRIGGER_SECRET && req.headers.get("x-trigger-secret") !== env.TRIGGER_SECRET) {
       return new Response("Forbidden", { status: 403 });
     }
-    const from = url.searchParams.get("from") || daysAgo(7);
-    const to = url.searchParams.get("to") || iso(new Date());
-    const client = db(env);
 
     try {
+      // Isolated auth check — verifies KSeF login + token encryption without
+      // touching invoices. Returns { ok, gotAccessToken } or the error message.
+      if (url.pathname === "/auth-test") {
+        const k = new KsefClient({
+          baseUrl: env.KSEF_BASE_URL,
+          nip: env.KSEF_NIP,
+          token: env.KSEF_TOKEN,
+          publicKeyPem: env.KSEF_PUBLIC_KEY_PEM || "",
+        });
+        const s = await k.openSession();
+        return Response.json({ ok: true, gotAccessToken: !!s.accessToken });
+      }
+
+      const from = url.searchParams.get("from") || daysAgo(7);
+      const to = url.searchParams.get("to") || iso(new Date());
+      const client = db(env);
+
       if (url.pathname === "/run/ksef") {
         const r = await runKsefFetch(env, client, from, to, { updateExisting: url.searchParams.get("update") === "1" });
         return Response.json(r);

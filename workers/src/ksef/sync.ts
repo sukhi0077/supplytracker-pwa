@@ -84,7 +84,7 @@ export async function runKsefFetch(
 
   try {
     // KSeF public key must be provided as an SPKI PEM secret (KSEF_PUBLIC_KEY_PEM).
-    const publicKeyPem = (env as unknown as { KSEF_PUBLIC_KEY_PEM?: string }).KSEF_PUBLIC_KEY_PEM || "";
+    const publicKeyPem = env.KSEF_PUBLIC_KEY_PEM || "";
     const client = new KsefClient({
       baseUrl: env.KSEF_BASE_URL,
       nip: env.KSEF_NIP,
