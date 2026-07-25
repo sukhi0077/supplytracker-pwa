@@ -52,6 +52,10 @@ export default {
   async fetch(req: Request, env: FullEnv): Promise<Response> {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
+    // Wrap everything so ANY error (e.g. missing SUPABASE_URL secret) still
+    // returns CORS headers + a readable message, instead of an opaque crash that
+    // the browser reports as a CORS failure.
+    try {
     const url = new URL(req.url);
     const isAction =
       req.method === "POST" &&
@@ -63,6 +67,12 @@ export default {
       });
     }
 
+    if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+      return jsonRes(
+        { error: "Worker missing secrets: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (wrangler secret put …)." },
+        500,
+      );
+    }
     const client = db(env);
 
     // Authorize: trigger secret OR admin session.
@@ -122,6 +132,9 @@ export default {
       return jsonRes({ error: "Not found" }, 404);
     } catch (e) {
       return jsonRes({ error: (e as Error).message }, 500);
+    }
+    } catch (e) {
+      return jsonRes({ error: `Worker error: ${(e as Error).message}` }, 500);
     }
   },
 };
