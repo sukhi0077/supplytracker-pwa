@@ -1,6 +1,6 @@
 // src/components/CategoriesManager.jsx — mirrors SupplyTracker's CategoriesManager.
 import { useState } from "react";
-import { useMasterData, useAddCategory, useUpdateCategory } from "../hooks/useCatalogue.js";
+import { useMasterData, useAddCategory, useUpdateCategory, useRemoveCategory } from "../hooks/useCatalogue.js";
 import { useSort } from "../hooks/useSort.js";
 import { SortTh } from "./SortTh.jsx";
 
@@ -8,14 +8,25 @@ const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outlin
 const btn = "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs hover:bg-slate-50";
 const accentBtn = "rounded-md bg-teal-600 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50";
 
-export default function CategoriesManager({ isAdmin }) {
+export default function CategoriesManager({ isAdmin, allowDelete = false }) {
   const { data, isLoading } = useMasterData();
   const add = useAddCategory();
   const update = useUpdateCategory();
+  const remove = useRemoveCategory();
   const [newName, setNewName] = useState("");
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState("");
   const [error, setError] = useState("");
+
+  const doRemove = async (c) => {
+    if (!window.confirm(`Delete category "${c.name}"? Only works if no sub-categories or items use it.`)) return;
+    setError("");
+    try {
+      await remove.mutateAsync(c.id);
+    } catch (e) {
+      setError(e.message || "Could not delete (still in use?).");
+    }
+  };
 
   const rows = data?.categories || [];
   const { sorted, sort } = useSort(rows, { key: "name" });
@@ -93,9 +104,20 @@ export default function CategoriesManager({ isAdmin }) {
                             <button onClick={() => setEditId(null)} className={btn}>Cancel</button>
                           </>
                         ) : (
-                          <button onClick={() => { setEditId(c.id); setEditName(c.name); }} className={btn}>
-                            Rename
-                          </button>
+                          <>
+                            <button onClick={() => { setEditId(c.id); setEditName(c.name); }} className={btn}>
+                              Rename
+                            </button>{" "}
+                            {allowDelete && (
+                              <button
+                                onClick={() => doRemove(c)}
+                                disabled={remove.isPending}
+                                className="rounded-md border border-red-300 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </>
                         ))}
                     </td>
                   </tr>

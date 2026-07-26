@@ -86,6 +86,7 @@ export const useUpdateSupplier = () =>
   useInvalidating(({ id, patch }) => SupplierRepository.update(id, patch), ["suppliers"]);
 export const useSetSupplierActive = () =>
   useInvalidating(({ id, isActive }) => SupplierRepository.setActive(id, isActive), ["suppliers"]);
+export const useRemoveSupplier = () => useInvalidating((id) => SupplierRepository.remove(id), ["suppliers"]);
 
 // ---- master data -----------------------------------------------------------
 export const useAddCategory = () => useInvalidating((name) => MasterDataRepository.addCategory(name), ["masterData"]);
@@ -96,6 +97,8 @@ export const useUpdateCategory = () =>
   useInvalidating(({ id, name }) => MasterDataRepository.updateCategory(id, name), ["masterData", "items"]);
 export const useUpdateSubCategory = () =>
   useInvalidating(({ id, patch }) => MasterDataRepository.updateSubCategory(id, patch), ["masterData", "items"]);
+export const useRemoveCategory = () =>
+  useInvalidating((id) => MasterDataRepository.removeCategory(id), ["masterData"]);
 export const useRemoveSubCategory = () =>
   useInvalidating((id) => MasterDataRepository.removeSubCategory(id), ["masterData"]);
 

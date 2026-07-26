@@ -15,13 +15,40 @@ const TABS = [
 
 export default function MasterData({ isAdmin }) {
   const [tab, setTab] = useState("items");
+  // Deletes are OFF by default. The admin must explicitly enable them, which
+  // reveals per-row delete buttons across all tabs.
+  const [allowDelete, setAllowDelete] = useState(false);
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-900">Masterdata</h2>
-      <p className="mb-4 mt-1 text-sm text-slate-500">
-        One place to manage items, suppliers, categories and sub-categories.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Masterdata</h2>
+          <p className="mb-4 mt-1 text-sm text-slate-500">
+            One place to manage items, suppliers, categories and sub-categories.
+          </p>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => setAllowDelete((v) => !v)}
+            className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+              allowDelete
+                ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+            title={allowDelete ? "Delete buttons are showing — click to hide them" : "Show delete buttons on rows"}
+          >
+            {allowDelete ? "🗑 Delete enabled — click to lock" : "Enable delete"}
+          </button>
+        )}
+      </div>
+
+      {allowDelete && isAdmin && (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          Delete mode is on. Deleting is permanent and can fail if the entry is still referenced
+          (e.g. an item used on invoices) — deactivate instead when in doubt. Click the button above to lock again.
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-2">
         {TABS.map((t) => (
@@ -39,10 +66,10 @@ export default function MasterData({ isAdmin }) {
         ))}
       </div>
 
-      {tab === "items" && <Items isAdmin={isAdmin} />}
-      {tab === "suppliers" && <Suppliers isAdmin={isAdmin} />}
-      {tab === "categories" && <CategoriesManager isAdmin={isAdmin} />}
-      {tab === "subcategories" && <SubCategoriesManager isAdmin={isAdmin} />}
+      {tab === "items" && <Items isAdmin={isAdmin} allowDelete={allowDelete} />}
+      {tab === "suppliers" && <Suppliers isAdmin={isAdmin} allowDelete={allowDelete} />}
+      {tab === "categories" && <CategoriesManager isAdmin={isAdmin} allowDelete={allowDelete} />}
+      {tab === "subcategories" && <SubCategoriesManager isAdmin={isAdmin} allowDelete={allowDelete} />}
     </div>
   );
 }

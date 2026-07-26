@@ -14,7 +14,7 @@ const btn = "rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs hov
 const btnDanger = "rounded-md border border-red-300 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50";
 const accentBtn = "rounded-md bg-teal-600 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50";
 
-export default function SubCategoriesManager({ isAdmin }) {
+export default function SubCategoriesManager({ isAdmin, allowDelete = false }) {
   const { data, isLoading } = useMasterData();
   const add = useAddSubCategory();
   const update = useUpdateSubCategory();
@@ -156,7 +156,9 @@ export default function SubCategoriesManager({ isAdmin }) {
                             >
                               Edit
                             </button>{" "}
-                            <button onClick={() => doRemove(s)} className={btnDanger}>Delete</button>
+                            {allowDelete && (
+                              <button onClick={() => doRemove(s)} className={btnDanger}>Delete</button>
+                            )}
                           </>
                         ))}
                     </td>

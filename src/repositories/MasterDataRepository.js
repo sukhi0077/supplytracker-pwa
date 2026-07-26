@@ -151,6 +151,18 @@ export class MasterDataRepository {
     return true;
   }
 
+  static async removeCategory(id) {
+    unwrap(
+      await withTimeout(
+        supabase.from("categories").delete().eq("id", id),
+        15000,
+        "Deleting category",
+      ),
+      "Deleting category",
+    );
+    return true;
+  }
+
   static async removeSubCategory(id) {
     unwrap(
       await withTimeout(

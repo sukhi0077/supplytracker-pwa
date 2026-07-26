@@ -2,7 +2,7 @@
 // inline add/edit form + sortable table (Name, KSeF Name, NIP, Email, Notes,
 // Active). Backed by the shared Supabase suppliers table.
 import { useMemo, useState } from "react";
-import { useSuppliers, useAddSupplier, useUpdateSupplier } from "../hooks/useCatalogue.js";
+import { useSuppliers, useAddSupplier, useUpdateSupplier, useRemoveSupplier } from "../hooks/useCatalogue.js";
 import { useSort } from "../hooks/useSort.js";
 import { SortTh } from "../components/SortTh.jsx";
 import { Loading, ErrorBox } from "../components/ui/parts.jsx";
@@ -21,10 +21,20 @@ function Field({ label, children }) {
   );
 }
 
-export default function Suppliers({ isAdmin }) {
+export default function Suppliers({ isAdmin, allowDelete = false }) {
   const { data, isLoading, error } = useSuppliers();
   const add = useAddSupplier();
   const update = useUpdateSupplier();
+  const remove = useRemoveSupplier();
+
+  const doRemove = async (s) => {
+    if (!window.confirm(`Delete supplier "${s.name}"? This can't be undone. If it's used on invoices or items, deactivate it instead.`)) return;
+    try {
+      await remove.mutateAsync(s.id);
+    } catch (e) {
+      setErr(e.message || "Could not delete (still referenced?).");
+    }
+  };
 
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
@@ -149,10 +159,15 @@ export default function Suppliers({ isAdmin }) {
                     <td className="px-3 py-2 text-slate-600">{s.email || "—"}</td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-slate-500" title={s.notes || ""}>{s.notes || "—"}</td>
                     <td className="px-3 py-2">{s.isActive ? "✓" : "—"}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="whitespace-nowrap px-3 py-2 text-right">
                       {isAdmin && (
                         <button onClick={() => openEdit(s)} className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50">
                           Edit
+                        </button>
+                      )}{" "}
+                      {isAdmin && allowDelete && (
+                        <button onClick={() => doRemove(s)} disabled={remove.isPending} className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs text-red-700 hover:bg-red-50">
+                          Delete
                         </button>
                       )}
                     </td>

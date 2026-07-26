@@ -35,7 +35,7 @@ function Field({ label, children, full }) {
   );
 }
 
-export default function Items({ isAdmin }) {
+export default function Items({ isAdmin, allowDelete = false }) {
   const { data: items, isLoading, error } = useItems();
   const { data: master } = useMasterData();
   const add = useAddItem();
@@ -385,7 +385,9 @@ export default function Items({ isAdmin }) {
                               >
                                 {editingThis ? "Editing" : "Edit"}
                               </button>{" "}
-                              <button onClick={() => doRemove(i)} disabled={busy} className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
+                              {allowDelete && (
+                                <button onClick={() => doRemove(i)} disabled={busy} className="rounded border border-red-300 bg-white px-2 py-0.5 text-xs text-red-700 hover:bg-red-50">Delete</button>
+                              )}
                             </>
                           )}
                         </td>

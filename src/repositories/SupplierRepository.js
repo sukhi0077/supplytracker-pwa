@@ -88,4 +88,16 @@ export class SupplierRepository {
   static async setActive(supplierId, isActive) {
     return SupplierRepository.update(supplierId, { isActive: !!isActive });
   }
+
+  static async remove(supplierId) {
+    unwrap(
+      await withTimeout(
+        supabase.from("suppliers").delete().eq("id", supplierId),
+        15000,
+        "Deleting supplier",
+      ),
+      "Deleting supplier",
+    );
+    return true;
+  }
 }
