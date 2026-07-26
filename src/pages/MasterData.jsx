@@ -5,6 +5,7 @@ import Items from "./Items.jsx";
 import Suppliers from "./Suppliers.jsx";
 import CategoriesManager from "../components/CategoriesManager.jsx";
 import SubCategoriesManager from "../components/SubCategoriesManager.jsx";
+import Toggle from "../components/ui/Toggle.jsx";
 
 const TABS = [
   { key: "items", label: "Items" },
@@ -21,36 +22,16 @@ export default function MasterData({ isAdmin }) {
 
   return (
     <div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Masterdata</h2>
-          <p className="mb-4 mt-1 text-sm text-slate-500">
-            One place to manage items, suppliers, categories and sub-categories.
-          </p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={() => setAllowDelete((v) => !v)}
-            className={`shrink-0 self-start rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
-              allowDelete
-                ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-            title={allowDelete ? "Delete buttons are showing — click to hide them" : "Show delete buttons on rows"}
-          >
-            {allowDelete ? "🗑 Delete enabled — click to lock" : "Enable delete"}
-          </button>
-        )}
+      <div className="mb-4">
+        <h2 className="text-2xl font-bold text-slate-900">Masterdata</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          One place to manage items, suppliers, categories and sub-categories.
+        </p>
       </div>
 
-      {allowDelete && isAdmin && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          Delete mode is on. Deleting is permanent and can fail if the entry is still referenced
-          (e.g. an item used on invoices) — deactivate instead when in doubt. Click the button above to lock again.
-        </div>
-      )}
-
-      <div className="mb-4 flex flex-wrap gap-2">
+      {/* Tabs get their own row — the delete switch used to sit right on top of
+          them on mobile, close enough to mis-tap. */}
+      <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -65,6 +46,32 @@ export default function MasterData({ isAdmin }) {
           </button>
         ))}
       </div>
+
+      {isAdmin && (
+        <div
+          className={`mt-4 mb-4 rounded-lg border px-3 py-2.5 transition-colors ${
+            allowDelete ? "border-red-200 bg-red-50" : "border-slate-200 bg-white"
+          }`}
+        >
+          <Toggle
+            checked={allowDelete}
+            onChange={setAllowDelete}
+            tone="red"
+            label={allowDelete ? "Delete mode on" : "Delete mode off"}
+            hint={
+              allowDelete
+                ? "Per-row delete buttons are showing on every tab."
+                : "Turn on to show per-row delete buttons."
+            }
+          />
+          {allowDelete && (
+            <p className="mt-2 border-t border-red-200 pt-2 text-xs text-red-700">
+              Deleting is permanent and can fail if the entry is still referenced (e.g. an item used on
+              invoices) — deactivate instead when in doubt.
+            </p>
+          )}
+        </div>
+      )}
 
       {tab === "items" && <Items isAdmin={isAdmin} allowDelete={allowDelete} />}
       {tab === "suppliers" && <Suppliers isAdmin={isAdmin} allowDelete={allowDelete} />}
