@@ -7,9 +7,12 @@ import { useMemo, useState } from "react";
 import {
   useInvoiceLines,
   useItems,
+  useMappings,
+  useSuppliers,
   useSetLineItem,
   useAddMapping,
 } from "../hooks/useCatalogue.js";
+import { buildSuggester } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 
 const money = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 }));
@@ -22,6 +25,8 @@ export default function InvoiceDetails({ isAdmin }) {
 
   const { data, isLoading, error } = useInvoiceLines({ unmappedOnly });
   const { data: items } = useItems();
+  const { data: mappings } = useMappings();
+  const { data: suppliers } = useSuppliers();
   const setLineItem = useSetLineItem();
   const addMapping = useAddMapping();
 
@@ -29,6 +34,12 @@ export default function InvoiceDetails({ isAdmin }) {
     () => (items || []).filter((i) => i.isActive).sort((a, b) => a.name.localeCompare(b.name)),
     [items],
   );
+
+  // Build the fuzzy suggester once from the catalogue + mappings + suppliers.
+  const suggest = useMemo(() => {
+    if (!items) return null;
+    return buildSuggester({ items, mappings: mappings || [], suppliers: suppliers || [] });
+  }, [items, mappings, suppliers]);
 
   const rows = useMemo(() => {
     const n = q.trim().toLowerCase();
@@ -43,6 +54,30 @@ export default function InvoiceDetails({ isAdmin }) {
   }, [data, q]);
 
   const unmappedCount = (data || []).filter((r) => !r.itemId).length;
+
+  // Suggestions (with confidence %) for the unmapped rows currently shown.
+  const suggestionsByLine = useMemo(() => {
+    if (!suggest) return {};
+    const out = {};
+    for (const r of rows) {
+      if (r.itemId) continue;
+      out[r.id] = suggest(r.ksefItemName, {
+        supplierId: r.supplierId,
+        supplierName: r.supplierName,
+        supplierKsefName: r.supplierKsefName,
+      });
+    }
+    return out;
+  }, [rows, suggest]);
+
+  const pct = (s) => `${Math.round(s * 100)}%`;
+  const viaTone = {
+    mapping: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    keyword: "bg-teal-100 text-teal-700 border-teal-200",
+    name: "bg-sky-100 text-sky-700 border-sky-200",
+    catalogue: "bg-slate-100 text-slate-600 border-slate-200",
+    supplier: "bg-violet-100 text-violet-700 border-violet-200",
+  };
 
   const mapLine = async (row, itemId) => {
     await setLineItem.mutateAsync({ lineId: row.id, itemId });
@@ -120,22 +155,47 @@ export default function InvoiceDetails({ isAdmin }) {
                     <td className="px-3 py-2 text-right font-medium text-slate-800">{money(r.grossTotal)}</td>
                     <td className="px-3 py-2">
                       {isAdmin ? (
-                        <select
-                          value={r.itemId || ""}
-                          onChange={(e) => mapLine(r, e.target.value || null)}
-                          className={`w-full min-w-[180px] rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
-                            r.itemId ? "border-slate-300" : "border-amber-300 bg-amber-50"
-                          }`}
-                        >
-                          <option value="">— unmapped —</option>
-                          {itemOptions.map((it) => (
-                            <option key={it.id} value={it.id}>{it.name}</option>
-                          ))}
-                        </select>
+                        <div className="min-w-[200px] space-y-1">
+                          {!r.itemId && (suggestionsByLine[r.id] || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {(suggestionsByLine[r.id] || []).map((s) => (
+                                <button
+                                  key={s.itemId}
+                                  onClick={() => mapLine(r, s.itemId)}
+                                  title={`${s.via} match`}
+                                  className={`rounded-full border px-2 py-0.5 text-xs hover:brightness-95 ${viaTone[s.via] || viaTone.catalogue}`}
+                                >
+                                  {s.itemName} <span className="font-semibold">{pct(s.score)}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <select
+                            value={r.itemId || ""}
+                            onChange={(e) => mapLine(r, e.target.value || null)}
+                            className={`w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
+                              r.itemId ? "border-slate-300" : "border-amber-300 bg-amber-50"
+                            }`}
+                          >
+                            <option value="">— unmapped —</option>
+                            {itemOptions.map((it) => (
+                              <option key={it.id} value={it.id}>{it.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       ) : r.itemName ? (
                         <span className="text-slate-800">{r.itemName}</span>
                       ) : (
-                        <span className="text-amber-600">unmapped</span>
+                        (() => {
+                          const best = (suggestionsByLine[r.id] || [])[0];
+                          return best ? (
+                            <span className="text-amber-700">
+                              unmapped · maybe {best.itemName} ({pct(best.score)})
+                            </span>
+                          ) : (
+                            <span className="text-amber-600">unmapped</span>
+                          );
+                        })()
                       )}
                     </td>
                   </tr>

@@ -109,7 +109,7 @@ export class InvoiceRepository {
       .from("invoice_lines")
       .select(
         "id, invoice_id, line_no, item_id, ksef_item_name_raw, quantity, unit, net_total, vat_rate, gross_total, pack_size, " +
-          "invoice:invoices(number, issue_date, supplier:suppliers(name)), item:items(name)",
+          "invoice:invoices(number, issue_date, supplier:suppliers(id, name, ksef_name)), item:items(name)",
       )
       .order("id", { ascending: false })
       .limit(limit);
@@ -131,7 +131,9 @@ export class InvoiceRepository {
       packSize: r.pack_size,
       invoiceNumber: r.invoice?.number || "",
       issueDate: r.invoice?.issue_date || "",
+      supplierId: r.invoice?.supplier?.id || null,
       supplierName: r.invoice?.supplier?.name || "",
+      supplierKsefName: r.invoice?.supplier?.ksef_name || "",
     }));
   }
 
