@@ -13,7 +13,9 @@ async function linesForInvoices(ids) {
       await withTimeout(
         supabase
           .from("invoice_lines")
-          .select("id, invoice_id, item_id, quantity, net_total, gross_total")
+          .select(
+            "id, invoice_id, item_id, quantity, unit, pack_size, net_unit, gross_unit, net_total, gross_total, ksef_item_name_raw",
+          )
           .in("invoice_id", slice),
         20000,
         "Loading invoice lines",
@@ -49,14 +51,38 @@ export class AnalyticsRepository {
         supplierId: i.supplier?.id || null,
         supplierName: i.supplier?.name || "—",
       })),
-      lines: lines.map((l) => ({
-        id: l.id,
-        invoiceId: l.invoice_id,
-        itemId: l.item_id,
-        quantity: Number(l.quantity || 0),
-        net: Number(l.net_total || 0),
-        gross: Number(l.gross_total || 0),
-      })),
+      lines: lines.map((l) => {
+        const qty = Number(l.quantity || 0);
+        const net = Number(l.net_total || 0);
+        // Unit price: prefer the stated one, else derive it from the total.
+        // Some suppliers only populate totals.
+        const netUnit = l.net_unit != null && l.net_unit !== "" ? Number(l.net_unit) : qty ? net / qty : null;
+        const grossUnit =
+          l.gross_unit != null && l.gross_unit !== ""
+            ? Number(l.gross_unit)
+            : qty
+              ? Number(l.gross_total || 0) / qty
+              : null;
+        // pack_size = base units per invoice unit, so base-unit price is
+        // unitPrice / pack. That's what makes a 10 kg sack comparable to a 1 kg bag.
+        const pack = Number(l.pack_size || 1) || 1;
+        return {
+          id: l.id,
+          invoiceId: l.invoice_id,
+          itemId: l.item_id,
+          ksefName: l.ksef_item_name_raw || "",
+          quantity: qty,
+          unit: l.unit || "",
+          packSize: pack,
+          netUnit,
+          grossUnit,
+          netPerBase: netUnit == null ? null : netUnit / pack,
+          grossPerBase: grossUnit == null ? null : grossUnit / pack,
+          baseQuantity: qty * pack,
+          net,
+          gross: Number(l.gross_total || 0),
+        };
+      }),
     };
   }
 }
