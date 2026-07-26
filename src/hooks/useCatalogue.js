@@ -10,6 +10,7 @@ import { KsefMappingRepository } from "../repositories/KsefMappingRepository.js"
 import { SalesRepository } from "../repositories/SalesRepository.js";
 import { StockRepository } from "../repositories/StockRepository.js";
 import { KsefJobRepository } from "../repositories/KsefJobRepository.js";
+import { AnalyticsRepository } from "../repositories/AnalyticsRepository.js";
 
 // ---- queries ---------------------------------------------------------------
 export function useMasterData() {
@@ -54,6 +55,12 @@ export function useSales(month) {
 }
 export function useKsefJobs() {
   return useQuery({ queryKey: ["ksefJobs"], queryFn: () => KsefJobRepository.getRecent() });
+}
+export function usePurchaseAnalytics(from, to) {
+  return useQuery({
+    queryKey: ["analytics", from || "all", to || "all"],
+    queryFn: () => AnalyticsRepository.getPurchaseData({ from, to }),
+  });
 }
 
 // ---- small mutation helper -------------------------------------------------
