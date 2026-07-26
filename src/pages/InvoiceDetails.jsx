@@ -134,6 +134,49 @@ export default function InvoiceDetails({ isAdmin }) {
     : "";
   const busy = remap.isPending || addMapping.isPending;
 
+  // The map control (chips + dropdown), reused by the desktop table and mobile cards.
+  const renderMapControl = (r) => {
+    if (!isAdmin) {
+      if (r.itemName) return <span className="text-sm text-slate-800">{r.itemName}</span>;
+      const best = (suggestionsByLine[r.id] || [])[0];
+      return best ? (
+        <span className="text-sm text-amber-700">unmapped · maybe {best.itemName} ({pct(best.score)})</span>
+      ) : (
+        <span className="text-sm text-amber-600">unmapped</span>
+      );
+    }
+    return (
+      <div className="space-y-1.5">
+        {!r.itemId && (suggestionsByLine[r.id] || []).length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {(suggestionsByLine[r.id] || []).map((s) => (
+              <button
+                key={s.itemId}
+                onClick={() => openRemap(r, s.itemId)}
+                title={`${s.via} match — tap to review & confirm`}
+                className={`rounded-full border px-2 py-1 text-xs hover:brightness-95 ${viaTone[s.via] || viaTone.catalogue}`}
+              >
+                {s.itemName} <span className="font-semibold">{pct(s.score)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <select
+          value={r.itemId || ""}
+          onChange={(e) => openRemap(r, e.target.value || null)}
+          className={`w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
+            r.itemId ? "border-slate-300" : "border-amber-300 bg-amber-50"
+          }`}
+        >
+          <option value="">— unmapped —</option>
+          {itemOptions.map((it) => (
+            <option key={it.id} value={it.id}>{it.name}</option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
   return (
     <div>
       <PageHeader
@@ -165,80 +208,63 @@ export default function InvoiceDetails({ isAdmin }) {
           </Empty>
         </Card>
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-3 font-semibold">Date</th>
-                  <th className="px-3 py-3 font-semibold">Invoice</th>
-                  <th className="px-3 py-3 font-semibold">Supplier</th>
-                  <th className="px-3 py-3 font-semibold">KSeF line text</th>
-                  <th className="px-3 py-3 font-semibold text-right">Qty</th>
-                  <th className="px-3 py-3 font-semibold text-right">Net</th>
-                  <th className="px-3 py-3 font-semibold text-right">Gross</th>
-                  <th className="px-3 py-3 font-semibold">Mapped item</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => (
-                  <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.issueDate}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.invoiceNumber}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.supplierName}</td>
-                    <td className="px-3 py-2 text-slate-800">{r.ksefItemName}</td>
-                    <td className="px-3 py-2 text-right text-slate-600">{num(r.quantity)} {r.unit}</td>
-                    <td className="px-3 py-2 text-right text-slate-600">{money(r.netTotal)}</td>
-                    <td className="px-3 py-2 text-right font-medium text-slate-800">{money(r.grossTotal)}</td>
-                    <td className="px-3 py-2">
-                      {isAdmin ? (
-                        <div className="min-w-[200px] space-y-1">
-                          {!r.itemId && (suggestionsByLine[r.id] || []).length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {(suggestionsByLine[r.id] || []).map((s) => (
-                                <button
-                                  key={s.itemId}
-                                  onClick={() => openRemap(r, s.itemId)}
-                                  title={`${s.via} match — click to review & confirm`}
-                                  className={`rounded-full border px-2 py-0.5 text-xs hover:brightness-95 ${viaTone[s.via] || viaTone.catalogue}`}
-                                >
-                                  {s.itemName} <span className="font-semibold">{pct(s.score)}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          <select
-                            value={r.itemId || ""}
-                            onChange={(e) => openRemap(r, e.target.value || null)}
-                            className={`w-full rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
-                              r.itemId ? "border-slate-300" : "border-amber-300 bg-amber-50"
-                            }`}
-                          >
-                            <option value="">— unmapped —</option>
-                            {itemOptions.map((it) => (
-                              <option key={it.id} value={it.id}>{it.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : r.itemName ? (
-                        <span className="text-slate-800">{r.itemName}</span>
-                      ) : (
-                        (() => {
-                          const best = (suggestionsByLine[r.id] || [])[0];
-                          return best ? (
-                            <span className="text-amber-700">unmapped · maybe {best.itemName} ({pct(best.score)})</span>
-                          ) : (
-                            <span className="text-amber-600">unmapped</span>
-                          );
-                        })()
-                      )}
-                    </td>
+        <>
+          {/* Desktop / tablet: table */}
+          <Card className="hidden overflow-hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3 font-semibold">Date</th>
+                    <th className="px-3 py-3 font-semibold">Invoice</th>
+                    <th className="px-3 py-3 font-semibold">Supplier</th>
+                    <th className="px-3 py-3 font-semibold">KSeF line text</th>
+                    <th className="px-3 py-3 font-semibold text-right">Qty</th>
+                    <th className="px-3 py-3 font-semibold text-right">Net</th>
+                    <th className="px-3 py-3 font-semibold text-right">Gross</th>
+                    <th className="px-3 py-3 font-semibold">Mapped item</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map((r) => (
+                    <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.issueDate}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.invoiceNumber}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.supplierName}</td>
+                      <td className="px-3 py-2 text-slate-800">{r.ksefItemName}</td>
+                      <td className="px-3 py-2 text-right text-slate-600">{num(r.quantity)} {r.unit}</td>
+                      <td className="px-3 py-2 text-right text-slate-600">{money(r.netTotal)}</td>
+                      <td className="px-3 py-2 text-right font-medium text-slate-800">{money(r.grossTotal)}</td>
+                      <td className="min-w-[220px] px-3 py-2">{renderMapControl(r)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {/* Mobile: stacked cards */}
+          <div className="space-y-2 md:hidden">
+            {rows.map((r) => (
+              <div
+                key={r.id}
+                className={`rounded-xl border p-3 ${r.itemId ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50/50"}`}
+              >
+                <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <span className="whitespace-nowrap">{r.invoiceNumber} · {r.issueDate}</span>
+                  <span className="truncate text-right">{r.supplierName}</span>
+                </div>
+                <div className="mt-1 break-words text-sm font-medium text-slate-800">{r.ksefItemName}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                  <span>Qty {num(r.quantity)} {r.unit}</span>
+                  <span>Net {money(r.netTotal)}</span>
+                  <span className="font-medium text-slate-700">Gross {money(r.grossTotal)}</span>
+                </div>
+                <div className="mt-2">{renderMapControl(r)}</div>
+              </div>
+            ))}
           </div>
-        </Card>
+        </>
       )}
 
       <p className="mt-2 text-xs text-slate-400">

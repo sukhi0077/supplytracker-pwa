@@ -12,7 +12,7 @@ const emptyLine = () => ({
   quantity: 1,
   unit: "szt",
   net_unit: 0,
-  vat_rate: 23,
+  vat_rate: 5,
 });
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -139,9 +139,10 @@ export default function InvoiceEditor({ open, onClose }) {
 
         <div className="space-y-2">
           {lines.map((l, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 p-2">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-12">
-                <div className="sm:col-span-4">
+            <div key={i} className="rounded-xl border border-slate-200 p-2.5">
+              {/* Row 1: item picker (full width on mobile) + remove */}
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
                   <Select
                     value={l.item_id}
                     onChange={(v) => setLine(i, { item_id: v })}
@@ -149,32 +150,43 @@ export default function InvoiceEditor({ open, onClose }) {
                     placeholder="Item (optional)…"
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <Num value={l.quantity} onChange={(v) => setLine(i, { quantity: v })} placeholder="Qty" />
-                </div>
-                <div className="sm:col-span-2">
-                  <Num value={l.net_unit} onChange={(v) => setLine(i, { net_unit: v })} placeholder="Net/unit" />
-                </div>
-                <div className="sm:col-span-2">
-                  <Num value={l.vat_rate} onChange={(v) => setLine(i, { vat_rate: v })} placeholder="VAT%" />
-                </div>
-                <div className="flex items-center justify-end sm:col-span-2">
-                  <span className="mr-2 text-xs text-slate-500">{computed[i].gross.toFixed(2)}</span>
-                  <button
-                    onClick={() => removeLine(i)}
-                    className="rounded-md border border-slate-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                    disabled={lines.length === 1}
-                  >
-                    ✕
-                  </button>
-                </div>
+                <button
+                  onClick={() => removeLine(i)}
+                  className="mt-0.5 shrink-0 rounded-md border border-slate-200 px-2.5 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40"
+                  disabled={lines.length === 1}
+                  aria-label="Remove line"
+                >
+                  ✕
+                </button>
               </div>
+
+              {/* Row 2: qty / net / vat with labels */}
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <label className="block">
+                  <span className="mb-0.5 block text-[11px] text-slate-500">Qty</span>
+                  <Num value={l.quantity} onChange={(v) => setLine(i, { quantity: v })} placeholder="1" />
+                </label>
+                <label className="block">
+                  <span className="mb-0.5 block text-[11px] text-slate-500">Net / unit</span>
+                  <Num value={l.net_unit} onChange={(v) => setLine(i, { net_unit: v })} placeholder="0.00" />
+                </label>
+                <label className="block">
+                  <span className="mb-0.5 block text-[11px] text-slate-500">VAT %</span>
+                  <Num value={l.vat_rate} onChange={(v) => setLine(i, { vat_rate: v })} placeholder="5" />
+                </label>
+              </div>
+
+              {/* Row 3: line gross */}
+              <div className="mt-1.5 text-right text-xs text-slate-500">
+                Line gross <b className="text-slate-800">{computed[i].gross.toFixed(2)}</b>
+              </div>
+
               {!l.item_id && (
-                <div className="mt-2">
+                <div className="mt-1.5">
                   <Text
                     value={l.ksef_item_name_raw}
                     onChange={(v) => setLine(i, { ksef_item_name_raw: v })}
-                    placeholder="Raw line description (when no item picked)"
+                    placeholder="Line description (when no item picked)"
                   />
                 </div>
               )}
@@ -182,7 +194,7 @@ export default function InvoiceEditor({ open, onClose }) {
           ))}
         </div>
 
-        <div className="mt-3 flex justify-end gap-6 text-sm">
+        <div className="mt-3 flex flex-wrap justify-end gap-x-6 gap-y-1 text-sm">
           <span className="text-slate-500">Net <b className="text-slate-800">{totals.net.toFixed(2)}</b></span>
           <span className="text-slate-500">VAT <b className="text-slate-800">{totals.vat.toFixed(2)}</b></span>
           <span className="text-slate-500">Gross <b className="text-slate-900">{totals.gross.toFixed(2)} {currency}</b></span>
