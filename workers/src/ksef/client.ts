@@ -157,8 +157,9 @@ export class KsefClient {
     if (!referenceNumber || !authenticationToken)
       throw new Error(`Bad /auth/ksef-token response: ${JSON.stringify(init).slice(0, 200)}`);
 
-    // 4. poll status
-    for (let i = 0; i < 30; i++) {
+    // 4. poll status (kept small — token auth usually succeeds immediately, and
+    //    each poll is a subrequest against the free-tier budget).
+    for (let i = 0; i < 12; i++) {
       const st = await this.req("GET", `/auth/${referenceNumber}`, { bearer: authenticationToken });
       const status = String(st.status?.code ?? st.status ?? st.processingCode ?? "").toLowerCase();
       if (status.includes("success") || status === "200" || st.accessToken) break;

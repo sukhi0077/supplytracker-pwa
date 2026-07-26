@@ -1,6 +1,10 @@
 // Orchestration: fetch from KSeF -> parse -> upsert into Supabase.
-// Idempotent — re-fetching a date range updates changed invoices and creates
-// new ones. Mirrors core/ksef/service.py at a high level.
+//
+// Free-tier aware: Cloudflare Workers allow only 50 subrequests per invocation.
+// So we (a) batch the setup lookups into single queries, (b) skip invoices that
+// are already imported (cheap, by ksef_reference), and (c) process only a capped
+// number of NEW invoices per run — re-running (or the daily cron) imports the
+// rest. Mirrors core/ksef/service.py at a high level.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "../lib/supabase.js";
 import { KsefClient } from "./client.js";
@@ -8,23 +12,45 @@ import { parseFa, type ParsedInvoice } from "./parser.js";
 import { fillLineGross } from "./money.js";
 import { normalizeKsefName } from "./matching.js";
 
+// Max NEW invoices to fully fetch+write per invocation, to stay under the 50
+// subrequest cap. Each new invoice costs ~3-4 subrequests.
+const MAX_NEW_PER_RUN = 8;
+
 export interface FetchResult {
   found: number;
   created: number;
   updated: number;
   skipped: number;
+  remaining: number;
   errors: string[];
 }
 
-// Resolve (or create) a supplier from the parsed invoice, keyed by NIP then name.
-async function resolveSupplier(db: SupabaseClient, inv: ParsedInvoice): Promise<string> {
-  if (inv.supplier_nip) {
-    const { data } = await db.from("suppliers").select("id").eq("nip", inv.supplier_nip).limit(1);
-    if (data && data.length) return data[0].id as string;
+interface SupplierMaps {
+  byNip: Map<string, string>;
+  byName: Map<string, string>;
+}
+
+async function loadSuppliers(db: SupabaseClient): Promise<SupplierMaps> {
+  const { data } = await db.from("suppliers").select("id, nip, name");
+  const byNip = new Map<string, string>();
+  const byName = new Map<string, string>();
+  for (const s of data || []) {
+    if (s.nip) byNip.set(String(s.nip), s.id as string);
+    if (s.name) byName.set(String(s.name).toLowerCase(), s.id as string);
   }
-  const name = inv.supplier_name || `NIP ${inv.supplier_nip}` || "Unknown supplier";
-  const { data: byName } = await db.from("suppliers").select("id").eq("name", name).limit(1);
-  if (byName && byName.length) return byName[0].id as string;
+  return { byNip, byName };
+}
+
+// Resolve a supplier from the preloaded maps; create it (1 subrequest) only when
+// missing, and cache it so later invoices in the same run reuse it.
+async function resolveSupplier(
+  db: SupabaseClient,
+  maps: SupplierMaps,
+  inv: ParsedInvoice,
+): Promise<string> {
+  if (inv.supplier_nip && maps.byNip.has(inv.supplier_nip)) return maps.byNip.get(inv.supplier_nip)!;
+  const name = inv.supplier_name || (inv.supplier_nip ? `NIP ${inv.supplier_nip}` : "Unknown supplier");
+  if (maps.byName.has(name.toLowerCase())) return maps.byName.get(name.toLowerCase())!;
 
   const { data: created, error } = await db
     .from("suppliers")
@@ -32,10 +58,12 @@ async function resolveSupplier(db: SupabaseClient, inv: ParsedInvoice): Promise<
     .select("id")
     .single();
   if (error) throw new Error(`create supplier: ${error.message}`);
-  return created.id as string;
+  const id = created.id as string;
+  if (inv.supplier_nip) maps.byNip.set(inv.supplier_nip, id);
+  maps.byName.set(name.toLowerCase(), id);
+  return id;
 }
 
-// Build a lookup of normalized KSeF text -> { itemId, packSize } from mappings.
 async function loadMappings(db: SupabaseClient): Promise<Map<string, { itemId: string; pack: number }>> {
   const { data } = await db.from("ksef_mappings").select("ksef_item_name,item_id,pack_size");
   const map = new Map<string, { itemId: string; pack: number }>();
@@ -60,9 +88,8 @@ export async function runKsefFetch(
     environment?: string;
   } = {},
 ): Promise<FetchResult> {
-  const res: FetchResult = { found: 0, created: 0, updated: 0, skipped: 0, errors: [] };
+  const res: FetchResult = { found: 0, created: 0, updated: 0, skipped: 0, remaining: 0, errors: [] };
 
-  // Job row (running).
   const { data: job } = await db
     .from("ksef_fetch_jobs")
     .insert({
@@ -75,7 +102,7 @@ export async function runKsefFetch(
     .single();
   const jobId = job?.id as string | undefined;
 
-  const finish = async (status: string) => {
+  const finish = async (status: string, note = "") => {
     if (!jobId) return;
     await db
       .from("ksef_fetch_jobs")
@@ -88,14 +115,12 @@ export async function runKsefFetch(
         invoices_skipped: res.skipped,
         error_count: res.errors.length,
         error_log: res.errors.join("\n").slice(0, 8000),
+        notes: note,
       })
       .eq("id", jobId);
   };
 
   try {
-    // Credentials come from the request (UI) when provided, else from env
-    // secrets (used by the cron). The public key is fetched automatically unless
-    // a PEM is pinned via KSEF_PUBLIC_KEY_PEM.
     const client = new KsefClient({
       baseUrl: opts.baseUrl || env.KSEF_BASE_URL,
       nip: opts.creds?.nip || env.KSEF_NIP,
@@ -106,26 +131,44 @@ export async function runKsefFetch(
 
     const refs = await client.queryInvoices(dateFrom, dateTo);
     res.found = refs.length;
+
+    // Batch: which of these are already imported (by ksef_reference)?
+    const refList = refs.map((r) => r.ksefReference);
+    const existingMap = new Map<string, string>();
+    if (refList.length) {
+      const { data: existing } = await db
+        .from("invoices")
+        .select("id, ksef_reference")
+        .in("ksef_reference", refList);
+      for (const e of existing || []) existingMap.set(e.ksef_reference as string, e.id as string);
+    }
+
+    const suppliers = await loadSuppliers(db);
     const mappings = await loadMappings(db);
     const writeStock = String(env.KSEF_WRITE_STOCK).toLowerCase() === "true";
 
-    for (const ref of refs) {
+    // Candidates = new invoices, or all when re-importing.
+    const candidates = refs.filter(
+      (r) => opts.updateExisting || !existingMap.has(r.ksefReference),
+    );
+
+    let processed = 0;
+    for (const ref of candidates) {
+      // Already-imported invoices we're not updating cost nothing here.
+      if (!opts.updateExisting && existingMap.has(ref.ksefReference)) {
+        res.skipped++;
+        continue;
+      }
+      if (processed >= MAX_NEW_PER_RUN) {
+        res.remaining++;
+        continue;
+      }
+      processed++;
+
       try {
         const xml = await client.fetchInvoiceXml(ref.ksefReference);
         const inv = parseFa(xml);
-        const supplierId = await resolveSupplier(db, inv);
-
-        // Exists already?
-        const { data: existing } = await db
-          .from("invoices")
-          .select("id")
-          .eq("supplier_id", supplierId)
-          .eq("number", inv.number)
-          .limit(1);
-        if (existing && existing.length && !opts.updateExisting) {
-          res.skipped++;
-          continue;
-        }
+        const supplierId = await resolveSupplier(db, suppliers, inv);
 
         const header = {
           supplier_id: supplierId,
@@ -142,9 +185,10 @@ export async function runKsefFetch(
           updated_at: new Date().toISOString(),
         };
 
+        const existingId = existingMap.get(ref.ksefReference);
         let invoiceId: string;
-        if (existing && existing.length) {
-          invoiceId = existing[0].id as string;
+        if (existingId) {
+          invoiceId = existingId;
           await db.from("invoices").update(header).eq("id", invoiceId);
           await db.from("invoice_lines").delete().eq("invoice_id", invoiceId);
           res.updated++;
@@ -185,7 +229,6 @@ export async function runKsefFetch(
         });
         if (lineRows.length) await db.from("invoice_lines").insert(lineRows);
 
-        // Optional: mirror stock (purchase_in) for mapped lines.
         if (writeStock) {
           const moves = lineRows
             .filter((r) => r.item_id)
@@ -204,7 +247,11 @@ export async function runKsefFetch(
       }
     }
 
-    await finish(res.errors.length ? "partial" : "success");
+    const note =
+      res.remaining > 0
+        ? `${res.remaining} invoice(s) not processed this run (free-tier subrequest budget) — run again to continue.`
+        : "";
+    await finish(res.errors.length ? "partial" : "success", note);
   } catch (e) {
     res.errors.push((e as Error).message);
     await finish("failed");

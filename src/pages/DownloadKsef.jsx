@@ -158,6 +158,7 @@ export default function DownloadKsef({ isAdmin }) {
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               Done — found {summary.found ?? "?"}, created {summary.created ?? 0}, updated {summary.updated ?? 0},
               skipped {summary.skipped ?? 0}
+              {summary.remaining ? `, ${summary.remaining} left (run again)` : ""}
               {summary.errors?.length ? `, ${summary.errors.length} error(s)` : ""}.
               {summary.errors?.length ? (
                 <div className="mt-1 max-h-24 overflow-y-auto text-xs text-red-700">
