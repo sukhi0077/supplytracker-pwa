@@ -148,4 +148,19 @@ export class InvoiceRepository {
     );
     return true;
   }
+
+  // Remap a line to an item AND set its pack size (base units per invoice unit).
+  static async remapLine(lineId, { itemId, packSize }) {
+    const patch = { item_id: itemId || null };
+    if (packSize != null && packSize !== "") patch.pack_size = Number(packSize);
+    unwrap(
+      await withTimeout(
+        supabase.from("invoice_lines").update(patch).eq("id", lineId),
+        15000,
+        "Mapping line",
+      ),
+      "Mapping line",
+    );
+    return true;
+  }
 }
