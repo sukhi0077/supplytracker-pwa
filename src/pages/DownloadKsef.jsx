@@ -181,6 +181,8 @@ export default function DownloadKsef({ isAdmin }) {
               skipped {summary.skipped ?? 0}
               {summary.remaining ? `, ${summary.remaining} left (run again)` : ""}
               {summary.errors?.length ? `, ${summary.errors.length} error(s)` : ""}.
+              {summary.note ? <div className="mt-1 text-xs text-emerald-700">{summary.note}</div> : null}
+              {summary.note ? <div className="mt-1 text-xs text-emerald-700">{summary.note}</div> : null}
               {summary.errors?.length ? (
                 <div className="mt-1 max-h-24 overflow-y-auto text-xs text-red-700">
                   {summary.errors.slice(0, 8).map((e, i) => (
