@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import {
   useInvoiceLines,
   useItems,
+  useMasterData,
   useMappings,
   useSuppliers,
   useSetLineItem,
@@ -27,8 +28,12 @@ export default function InvoiceDetails({ isAdmin }) {
 
   const { data, isLoading, error } = useInvoiceLines({ unmappedOnly });
   const { data: items } = useItems();
+  const { data: master } = useMasterData();
   const { data: mappings } = useMappings();
   const { data: suppliers } = useSuppliers();
+
+  // Resolve unit codes by id (items store unit as a FK after normalization).
+  const unitCodeById = useMemo(() => new Map((master?.units || []).map((u) => [u.id, u.code])), [master]);
   const setLineItem = useSetLineItem();
   const remap = useRemapLine();
   const addMapping = useAddMapping();
@@ -124,6 +129,9 @@ export default function InvoiceDetails({ isAdmin }) {
   };
 
   const pendItem = pending ? (items || []).find((i) => i.id === pending.itemId) : null;
+  const pendUnit = pendItem
+    ? unitCodeById.get(pendItem.unitId) || unitCodeById.get(pendItem.defaultUomId) || pendItem.defaultUnit || ""
+    : "";
   const busy = remap.isPending || addMapping.isPending;
 
   return (
@@ -259,7 +267,7 @@ export default function InvoiceDetails({ isAdmin }) {
               <div className="font-medium text-slate-800 break-words">{pending.row.ksefItemName || "—"}</div>
               <div className="mt-1 text-slate-500">
                 → <span className="font-semibold text-slate-800">{pendItem?.name || "?"}</span>
-                {pendItem?.defaultUnit ? <span className="ml-1 text-slate-400">· unit: {pendItem.defaultUnit}</span> : null}
+                {pendUnit ? <span className="ml-1 text-slate-400">· unit: {pendUnit}</span> : null}
               </div>
             </div>
 
