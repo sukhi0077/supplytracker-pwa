@@ -34,6 +34,12 @@ export function useInvoice(id) {
 export function useOrderLog() {
   return useQuery({ queryKey: ["orderLog"], queryFn: () => InvoiceDetailRepository.getAll() });
 }
+export function useInvoiceLines(opts) {
+  return useQuery({
+    queryKey: ["invoiceLines", opts?.unmappedOnly || false, opts?.search || ""],
+    queryFn: () => InvoiceRepository.getLines(opts),
+  });
+}
 export function useMappings() {
   return useQuery({ queryKey: ["ksefMappings"], queryFn: KsefMappingRepository.getAll });
 }
@@ -89,6 +95,8 @@ export const useRemoveSubCategory = () =>
 // ---- invoices --------------------------------------------------------------
 export const useCreateInvoice = () =>
   useInvalidating(({ header, lines }) => InvoiceRepository.createWithLines(header, lines), ["invoices"]);
+export const useSetLineItem = () =>
+  useInvalidating(({ lineId, itemId }) => InvoiceRepository.setLineItem(lineId, itemId), ["invoiceLines"]);
 
 // ---- order log -------------------------------------------------------------
 export const useAddOrderLine = () => useInvalidating((row) => InvoiceDetailRepository.add(row), ["orderLog"]);

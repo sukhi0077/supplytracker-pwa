@@ -1,148 +1,143 @@
 // src/pages/InvoiceDetails.jsx
-// The purchase / orders log (Django InvoiceDetail) -> shared invoice_details.
+// Line-level view of fetched invoices (matches the original SupplyTracker
+// "Invoice Details"): every invoice LINE with the catalogue item it mapped to,
+// so unmapped KSeF lines can be searched and mapped. Data comes from
+// invoice_lines (populated by the KSeF fetch), not the orders-log table.
 import { useMemo, useState } from "react";
 import {
-  useOrderLog,
-  useSuppliers,
+  useInvoiceLines,
   useItems,
-  useAddOrderLine,
-  useRemoveOrderLine,
+  useSetLineItem,
+  useAddMapping,
 } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
-import { Field, Text, Num, Select, Btn } from "../components/ui/form.jsx";
-import Modal from "../components/ui/Modal.jsx";
 
-const today = () => new Date().toISOString().slice(0, 10);
-const money = (v) => (v == null ? "" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 }));
-
-function AddLine({ open, onClose }) {
-  const { data: suppliers } = useSuppliers();
-  const { data: items } = useItems();
-  const add = useAddOrderLine();
-  const [row, setRow] = useState({ orderDate: today(), supplierId: null, itemId: null, quantity: 1, unitPriceNet: null });
-  const [error, setError] = useState("");
-  const set = (k) => (v) => setRow((r) => ({ ...r, [k]: v }));
-
-  const save = async () => {
-    setError("");
-    if (!row.supplierId) return setError("Pick a supplier.");
-    try {
-      const lineTotalNet =
-        row.quantity != null && row.unitPriceNet != null
-          ? Math.round(Number(row.quantity) * Number(row.unitPriceNet) * 100) / 100
-          : null;
-      await add.mutateAsync({ ...row, lineTotalNet });
-      onClose();
-      setRow({ orderDate: today(), supplierId: null, itemId: null, quantity: 1, unitPriceNet: null });
-    } catch (e) {
-      setError(e.message || "Save failed.");
-    }
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Add order line"
-      footer={
-        <>
-          <Btn onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" onClick={save} disabled={add.isPending}>
-            {add.isPending ? "Saving…" : "Save"}
-          </Btn>
-        </>
-      }
-    >
-      {error && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Date">
-          <Text type="date" value={row.orderDate} onChange={set("orderDate")} />
-        </Field>
-        <Field label="Supplier">
-          <Select value={row.supplierId} onChange={set("supplierId")} options={(suppliers || []).map((s) => ({ value: s.id, label: s.name }))} placeholder="Pick…" />
-        </Field>
-        <Field label="Item" className="col-span-2">
-          <Select value={row.itemId} onChange={set("itemId")} options={(items || []).map((it) => ({ value: it.id, label: it.name }))} placeholder="(unmapped)" />
-        </Field>
-        <Field label="Quantity">
-          <Num value={row.quantity} onChange={set("quantity")} />
-        </Field>
-        <Field label="Unit price (net)">
-          <Num value={row.unitPriceNet} onChange={set("unitPriceNet")} />
-        </Field>
-      </div>
-    </Modal>
-  );
-}
+const money = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 }));
+const num = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString());
 
 export default function InvoiceDetails({ isAdmin }) {
-  const { data, isLoading, error } = useOrderLog();
-  const remove = useRemoveOrderLine();
+  const [unmappedOnly, setUnmappedOnly] = useState(false);
   const [q, setQ] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
+  const [saveMapping, setSaveMapping] = useState(true);
+
+  const { data, isLoading, error } = useInvoiceLines({ unmappedOnly });
+  const { data: items } = useItems();
+  const setLineItem = useSetLineItem();
+  const addMapping = useAddMapping();
+
+  const itemOptions = useMemo(
+    () => (items || []).filter((i) => i.isActive).sort((a, b) => a.name.localeCompare(b.name)),
+    [items],
+  );
 
   const rows = useMemo(() => {
     const n = q.trim().toLowerCase();
+    if (!n) return data || [];
     return (data || []).filter(
-      (r) => !n || r.itemName.toLowerCase().includes(n) || r.supplierName.toLowerCase().includes(n),
+      (r) =>
+        r.ksefItemName.toLowerCase().includes(n) ||
+        r.itemName.toLowerCase().includes(n) ||
+        r.invoiceNumber.toLowerCase().includes(n) ||
+        r.supplierName.toLowerCase().includes(n),
     );
   }, [data, q]);
+
+  const unmappedCount = (data || []).filter((r) => !r.itemId).length;
+
+  const mapLine = async (row, itemId) => {
+    await setLineItem.mutateAsync({ lineId: row.id, itemId });
+    // Optionally teach the mapping so future fetches auto-map this KSeF text.
+    if (saveMapping && itemId && row.ksefItemName) {
+      try {
+        await addMapping.mutateAsync({ ksefItemName: row.ksefItemName, itemId });
+      } catch {
+        /* mapping may already exist — ignore */
+      }
+    }
+  };
 
   return (
     <div>
       <PageHeader
         title="Invoice details"
-        subtitle="Purchase / orders log — one row per purchased line."
-        right={isAdmin && <Btn variant="primary" onClick={() => setAddOpen(true)}>+ Add line</Btn>}
+        subtitle="Every invoice line and the catalogue item it maps to. Map the unmapped ones here."
       />
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search item or supplier…"
-          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+          placeholder="Search KSeF text, item, invoice, supplier…"
+          className="w-full max-w-sm rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
         />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={unmappedOnly} onChange={(e) => setUnmappedOnly(e.target.checked)} />
+          Unmapped only {unmappedCount ? `(${unmappedCount})` : ""}
+        </label>
+        {isAdmin && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" checked={saveMapping} onChange={(e) => setSaveMapping(e.target.checked)} />
+            Also save as KSeF mapping
+          </label>
+        )}
       </div>
 
       {error ? (
         <ErrorBox error={error} />
       ) : isLoading ? (
-        <Loading label="Loading order log…" />
+        <Loading label="Loading invoice lines…" />
       ) : rows.length === 0 ? (
-        <Card className="p-2"><Empty>No order lines yet.</Empty></Card>
+        <Card className="p-2">
+          <Empty>
+            {unmappedOnly ? "No unmapped lines — everything is mapped." : "No invoice lines yet. Fetch invoices from Download KSeF."}
+          </Empty>
+        </Card>
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Date</th>
-                  <th className="px-4 py-3 font-semibold">Item</th>
-                  <th className="px-4 py-3 font-semibold">Supplier</th>
-                  <th className="px-4 py-3 font-semibold text-right">Qty</th>
-                  <th className="px-4 py-3 font-semibold text-right">Net total</th>
-                  {isAdmin && <th className="px-4 py-3" />}
+                  <th className="px-3 py-3 font-semibold">Date</th>
+                  <th className="px-3 py-3 font-semibold">Invoice</th>
+                  <th className="px-3 py-3 font-semibold">Supplier</th>
+                  <th className="px-3 py-3 font-semibold">KSeF line text</th>
+                  <th className="px-3 py-3 font-semibold text-right">Qty</th>
+                  <th className="px-3 py-3 font-semibold text-right">Net</th>
+                  <th className="px-3 py-3 font-semibold text-right">Gross</th>
+                  <th className="px-3 py-3 font-semibold">Mapped item</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-4 py-2.5 text-slate-600">{r.orderDate}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-900">{r.itemName}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{r.supplierName}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{r.quantity} {r.unit}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-700">{money(r.lineTotalNet)}</td>
-                    {isAdmin && (
-                      <td className="px-4 py-2.5 text-right">
-                        <button
-                          onClick={() => remove.mutate(r.id)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                  <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
+                    <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.issueDate}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.invoiceNumber}</td>
+                    <td className="px-3 py-2 text-slate-600">{r.supplierName}</td>
+                    <td className="px-3 py-2 text-slate-800">{r.ksefItemName}</td>
+                    <td className="px-3 py-2 text-right text-slate-600">{num(r.quantity)} {r.unit}</td>
+                    <td className="px-3 py-2 text-right text-slate-600">{money(r.netTotal)}</td>
+                    <td className="px-3 py-2 text-right font-medium text-slate-800">{money(r.grossTotal)}</td>
+                    <td className="px-3 py-2">
+                      {isAdmin ? (
+                        <select
+                          value={r.itemId || ""}
+                          onChange={(e) => mapLine(r, e.target.value || null)}
+                          className={`w-full min-w-[180px] rounded-md border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
+                            r.itemId ? "border-slate-300" : "border-amber-300 bg-amber-50"
+                          }`}
                         >
-                          Delete
-                        </button>
-                      </td>
-                    )}
+                          <option value="">— unmapped —</option>
+                          {itemOptions.map((it) => (
+                            <option key={it.id} value={it.id}>{it.name}</option>
+                          ))}
+                        </select>
+                      ) : r.itemName ? (
+                        <span className="text-slate-800">{r.itemName}</span>
+                      ) : (
+                        <span className="text-amber-600">unmapped</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -151,7 +146,10 @@ export default function InvoiceDetails({ isAdmin }) {
         </Card>
       )}
 
-      {isAdmin && <AddLine open={addOpen} onClose={() => setAddOpen(false)} />}
+      <p className="mt-2 text-xs text-slate-400">
+        {rows.length} line{rows.length === 1 ? "" : "s"}. Mapping a line here updates the invoice line; “save as KSeF
+        mapping” also teaches future fetches to auto-map that supplier text.
+      </p>
     </div>
   );
 }
