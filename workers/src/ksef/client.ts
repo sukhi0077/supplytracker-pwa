@@ -183,38 +183,48 @@ export class KsefClient {
     return this.session.accessToken;
   }
 
-  // 6. query invoice references in a date range (subject invoices = purchases).
+  // 6. Query invoice metadata in a date range. Subject2 = invoices where we are
+  //    the buyer (received / cost invoices). POST /invoices/query/metadata.
   async queryInvoices(dateFrom: string, dateTo: string): Promise<KsefInvoiceRef[]> {
     const body = {
-      subjectType: "subject2", // invoices where we are the buyer
-      dateRange: { from: `${dateFrom}T00:00:00Z`, to: `${dateTo}T23:59:59Z` },
+      subjectType: "Subject2",
+      dateRange: {
+        from: `${dateFrom}T00:00:00.000Z`,
+        to: `${dateTo}T23:59:59.999Z`,
+        dateType: "Invoicing",
+      },
     };
     const out: KsefInvoiceRef[] = [];
-    let page = 0;
-    for (; page < 200; page++) {
-      const resp = await this.req("POST", `/invoices/query?pageOffset=${page}&pageSize=100`, {
-        bearer: this.bearer(),
-        body,
-      });
+    const pageSize = 100;
+    for (let page = 0; page < 200; page++) {
+      const resp = await this.req(
+        "POST",
+        `/invoices/query/metadata?pageOffset=${page}&pageSize=${pageSize}`,
+        { bearer: this.bearer(), body },
+      );
       const list: unknown[] =
-        resp.invoices || resp.invoiceHeaderList || resp.items || resp.results || [];
+        resp.invoices || resp.invoiceList || resp.items || resp.results || resp.content || [];
       for (const raw of list) {
         const inv = raw as Record<string, unknown>;
         const ref =
-          (inv.ksefReferenceNumber as string) ||
           (inv.ksefNumber as string) ||
+          (inv.ksefReferenceNumber as string) ||
           (inv.referenceNumber as string) ||
           "";
-        if (ref) out.push({ ksefReference: ref, invoiceNumber: inv.invoiceNumber as string });
+        if (ref)
+          out.push({
+            ksefReference: ref,
+            invoiceNumber: (inv.invoiceNumber || inv.number) as string,
+          });
       }
-      if (list.length < 100) break;
+      if (list.length < pageSize) break;
     }
     return out;
   }
 
-  // 7. fetch one invoice's XML by reference.
+  // 7. Fetch one invoice's XML by KSeF number. GET /invoices/ksef/{ksefNumber}.
   async fetchInvoiceXml(ksefReference: string): Promise<string> {
-    const resp = await fetch(`${this.base}/invoices/${encodeURIComponent(ksefReference)}`, {
+    const resp = await fetch(`${this.base}/invoices/ksef/${encodeURIComponent(ksefReference)}`, {
       headers: { Authorization: `Bearer ${this.bearer()}` },
     });
     if (!resp.ok) throw new Error(`fetch invoice ${ksefReference} -> ${resp.status}`);
