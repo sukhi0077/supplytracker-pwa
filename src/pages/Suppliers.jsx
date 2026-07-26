@@ -57,6 +57,8 @@ export default function Suppliers({ isAdmin, allowDelete = false }) {
     setErr("");
     setEditId(s.id);
     setForm({ name: s.name, ksefName: s.ksefName || "", nip: s.nip || "", email: s.email || "", notes: s.notes || "", isActive: s.isActive });
+    // The edit form lives at the top of the page — bring it into view on mobile.
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const close = () => { setAdding(false); setEditId(null); setErr(""); };
 
@@ -137,7 +139,71 @@ export default function Suppliers({ isAdmin, allowDelete = false }) {
         ) : isLoading ? (
           <Loading label="Loading suppliers…" />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: sort toolbar. */}
+          <div className="mb-2 flex items-center gap-2 md:hidden">
+            <select
+              value={sort.key || "name"}
+              onChange={(e) => { if (e.target.value !== sort.key) sort.toggle(e.target.value); }}
+              className="flex-1 rounded border border-slate-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+            >
+              <option value="name">Sort: Name</option>
+              <option value="ksefName">Sort: KSeF Name</option>
+              <option value="nip">Sort: NIP</option>
+              <option value="isActive">Sort: Active</option>
+            </select>
+            <button
+              onClick={() => sort.toggle(sort.key || "name")}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+              title="Toggle sort direction"
+            >
+              {sort.dir === "asc" ? "▲" : "▼"}
+            </button>
+          </div>
+
+          {/* Mobile: stacked cards. */}
+          <div className="space-y-2 md:hidden">
+            {sorted.map((s) => {
+              const editingThis = editId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`rounded-lg border p-3 ${editingThis ? "border-teal-300 bg-teal-50" : "border-slate-200 bg-white"} ${s.isActive ? "" : "opacity-55"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900">{s.name}</div>
+                      {s.ksefName && <div className="mt-0.5 truncate text-xs text-slate-500">{s.ksefName}</div>}
+                    </div>
+                    {isAdmin && (
+                      <div className="flex shrink-0 gap-1.5">
+                        <button
+                          onClick={() => (editingThis ? close() : openEdit(s))}
+                          className={`rounded border px-2 py-1 text-xs ${editingThis ? "border-teal-400 bg-teal-100 text-teal-800" : "border-slate-300 bg-white"}`}
+                        >
+                          {editingThis ? "Editing" : "Edit"}
+                        </button>
+                        {allowDelete && (
+                          <button onClick={() => doRemove(s)} disabled={remove.isPending} className="rounded border border-red-300 bg-white px-2 py-1 text-xs text-red-700">
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-600">
+                    {s.nip && <span className="font-mono">NIP {s.nip}</span>}
+                    {s.email && <span className="truncate">{s.email}</span>}
+                    {!s.isActive && <span className="font-semibold text-slate-500">Inactive</span>}
+                  </div>
+                  {s.notes && <div className="mt-1 text-[11px] text-slate-400">{s.notes}</div>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: sortable table. */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -176,6 +242,7 @@ export default function Suppliers({ isAdmin, allowDelete = false }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
         <p className="mt-2 text-xs text-slate-400">
           {filtered.length} supplier{filtered.length === 1 ? "" : "s"}.
