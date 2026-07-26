@@ -25,42 +25,80 @@ export interface FetchResult {
   errors: string[];
 }
 
+interface SupplierRec {
+  nip: string;
+  ksefName: string;
+}
 interface SupplierMaps {
-  byNip: Map<string, string>;
-  byName: Map<string, string>;
+  byNip: Map<string, string>; // nip -> id (merge key)
+  byKey: Map<string, string>; // lower(name) AND lower(ksef_name) -> id
+  byId: Map<string, SupplierRec>; // id -> mutable { nip, ksefName }
 }
 
 async function loadSuppliers(db: SupabaseClient): Promise<SupplierMaps> {
-  const { data } = await db.from("suppliers").select("id, nip, name");
+  const { data } = await db.from("suppliers").select("id, name, nip, ksef_name");
   const byNip = new Map<string, string>();
-  const byName = new Map<string, string>();
+  const byKey = new Map<string, string>();
+  const byId = new Map<string, SupplierRec>();
   for (const s of data || []) {
-    if (s.nip) byNip.set(String(s.nip), s.id as string);
-    if (s.name) byName.set(String(s.name).toLowerCase(), s.id as string);
+    const id = s.id as string;
+    const nip = String(s.nip || "").trim();
+    const ksefName = String(s.ksef_name || "").trim();
+    if (nip) byNip.set(nip, id);
+    if (s.name) byKey.set(String(s.name).toLowerCase(), id);
+    if (ksefName) byKey.set(ksefName.toLowerCase(), id);
+    byId.set(id, { nip, ksefName });
   }
-  return { byNip, byName };
+  return { byNip, byKey, byId };
 }
 
-// Resolve a supplier from the preloaded maps; create it (1 subrequest) only when
-// missing, and cache it so later invoices in the same run reuse it.
+// Resolve the invoice's supplier, merging on NIP so a legal-name row and a
+// curated row for the same company don't both accumulate:
+//   1) same NIP  -> reuse that supplier.
+//   2) same name / stored legal name -> reuse it; if it has a BLANK nip and the
+//      invoice carries one, fill the nip (+ legal name) on that row.
+//   3) otherwise create a new supplier.
+// Only fills/creates trigger a write; matches are in-memory (free-tier friendly).
 async function resolveSupplier(
   db: SupabaseClient,
   maps: SupplierMaps,
   inv: ParsedInvoice,
 ): Promise<string> {
-  if (inv.supplier_nip && maps.byNip.has(inv.supplier_nip)) return maps.byNip.get(inv.supplier_nip)!;
-  const name = inv.supplier_name || (inv.supplier_nip ? `NIP ${inv.supplier_nip}` : "Unknown supplier");
-  if (maps.byName.has(name.toLowerCase())) return maps.byName.get(name.toLowerCase())!;
+  const nip = (inv.supplier_nip || "").trim();
+  const legal = (inv.supplier_name || "").trim();
 
+  // 1) merge on NIP
+  if (nip && maps.byNip.has(nip)) return maps.byNip.get(nip)!;
+
+  // 2) match on legal name (vs the supplier's name OR stored ksef_name)
+  const key = legal.toLowerCase();
+  const matchId = key ? maps.byKey.get(key) : undefined;
+  if (matchId) {
+    const rec = maps.byId.get(matchId);
+    if (nip && rec && rec.nip.trim() === "") {
+      const patch: Record<string, string> = { nip };
+      if (rec.ksefName.trim() === "" && legal) patch.ksef_name = legal;
+      await db.from("suppliers").update(patch).eq("id", matchId);
+      rec.nip = nip;
+      if (patch.ksef_name) rec.ksefName = legal;
+      maps.byNip.set(nip, matchId);
+    }
+    return matchId;
+  }
+
+  // 3) create new
+  const name = legal || (nip ? `NIP ${nip}` : "Unknown supplier");
   const { data: created, error } = await db
     .from("suppliers")
-    .insert({ name, nip: inv.supplier_nip || "", ksef_name: inv.supplier_name || "" })
+    .insert({ name, nip, ksef_name: legal })
     .select("id")
     .single();
   if (error) throw new Error(`create supplier: ${error.message}`);
   const id = created.id as string;
-  if (inv.supplier_nip) maps.byNip.set(inv.supplier_nip, id);
-  maps.byName.set(name.toLowerCase(), id);
+  if (nip) maps.byNip.set(nip, id);
+  maps.byKey.set(name.toLowerCase(), id);
+  if (legal) maps.byKey.set(legal.toLowerCase(), id);
+  maps.byId.set(id, { nip, ksefName: legal });
   return id;
 }
 
