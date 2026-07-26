@@ -307,7 +307,86 @@ export default function Items({ isAdmin, allowDelete = false }) {
         ) : isLoading ? (
           <Loading label="Loading items…" />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: sort + status toolbar (column filters are desktop-only). */}
+          <div className="mb-2 flex items-center gap-2 md:hidden">
+            <select
+              value={sort.key || "name"}
+              onChange={(e) => { if (e.target.value !== sort.key) sort.toggle(e.target.value); }}
+              className={`${filterInp} flex-1`}
+            >
+              <option value="name">Sort: Name</option>
+              <option value="code">Sort: Code</option>
+              <option value="category">Sort: Category</option>
+              <option value="subCategory">Sort: Sub-category</option>
+              <option value="defaultVatRate">Sort: VAT %</option>
+            </select>
+            <button
+              onClick={() => sort.toggle(sort.key || "name")}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+              title="Toggle sort direction"
+            >
+              {sort.dir === "asc" ? "▲" : "▼"}
+            </button>
+            <select value={colF.active} onChange={(e) => setF("active", e.target.value)} className={`${filterInp} flex-1`}>
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          {/* Mobile: stacked cards. */}
+          <div className="space-y-2 md:hidden">
+            {sorted.map((i) => {
+              const editingThis = editId === i.id;
+              return (
+                <div
+                  key={i.id}
+                  className={`rounded-lg border p-3 ${editingThis ? "border-teal-300 bg-teal-50" : "border-slate-200 bg-white"} ${i.isActive ? "" : "opacity-55"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900">{i.name}</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-slate-500">{i.code}</div>
+                    </div>
+                    {isAdmin && (
+                      <div className="flex shrink-0 gap-1.5">
+                        <button
+                          onClick={() => (editingThis ? close() : openEdit(i))}
+                          className={`rounded border px-2 py-1 text-xs ${editingThis ? "border-teal-400 bg-teal-100 text-teal-800" : "border-slate-300 bg-white"}`}
+                        >
+                          {editingThis ? "Editing" : "Edit"}
+                        </button>
+                        {allowDelete && (
+                          <button onClick={() => doRemove(i)} disabled={busy} className="rounded border border-red-300 bg-white px-2 py-1 text-xs text-red-700">
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-600">
+                    <span>{[i.category, i.subCategory].filter(Boolean).join(" › ") || "—"}</span>
+                    {i.defaultUnit && <span>{i.defaultUnit}</span>}
+                    <span>VAT {parseFloat(i.defaultVatRate ?? 0)}%</span>
+                    {!i.isActive && <span className="font-semibold text-slate-500">Inactive</span>}
+                  </div>
+                  {i.matchKeywords && (
+                    <div className="mt-1 truncate text-[11px] text-slate-400" title={i.matchKeywords}>{i.matchKeywords}</div>
+                  )}
+                  {editingThis && (
+                    <div className="mt-3 border-t border-teal-200 pt-3">
+                      <div className="mb-2 text-sm font-semibold text-slate-700">Edit item</div>
+                      {formFields("edit")}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: full sortable table with column filters. */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -406,6 +485,7 @@ export default function Items({ isAdmin, allowDelete = false }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
         <p className="mt-2 text-xs text-slate-400">
           {filtered.length} item{filtered.length === 1 ? "" : "s"}. Items are added and edited here only.
