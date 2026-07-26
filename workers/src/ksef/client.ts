@@ -137,8 +137,8 @@ export class KsefClient {
   async openSession(): Promise<KsefSession> {
     if (!this.cfg.nip || !this.cfg.token) throw new Error("KSeF NIP + token required");
 
-    // 1. challenge
-    const ctx = { contextIdentifier: { type: "onip", identifier: this.cfg.nip } };
+    // 1. challenge. contextIdentifier per KSeF 2.0: { type: "Nip", value: <nip> }.
+    const ctx = { contextIdentifier: { type: "Nip", value: this.cfg.nip } };
     const challengeResp = await this.req("POST", "/auth/challenge", { body: ctx });
     const challenge: string = challengeResp.challenge;
     const tsMillis =
