@@ -87,8 +87,7 @@ export default function DownloadKsef({ isAdmin }) {
   // Fetch invoices, auto-continuing while the worker reports invoices "left".
   // Each round is a fresh worker invocation (fresh free-tier subrequest budget);
   // the pause between rounds lets KSeF's rate limit cool down.
-  const MAX_ROUNDS = 8;
-  const WAIT_S = 20;
+  const MAX_ROUNDS = 15;
   const runAll = async () => {
     setError("");
     setSummary(null);
@@ -127,7 +126,11 @@ export default function DownloadKsef({ isAdmin }) {
         qc.invalidateQueries({ queryKey: ["invoices"] });
         if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
         if (!totals.remaining || cancelRef.current || round === MAX_ROUNDS) break;
-        for (let s = WAIT_S; s > 0 && !cancelRef.current; s--) {
+        // A round that processed few invoices was rate-limited — give KSeF's
+        // limit window a full minute to reset, otherwise a short breather.
+        const roundProcessed = (res.created ?? 0) + (res.updated ?? 0);
+        const waitS = roundProcessed >= 5 ? 20 : 60;
+        for (let s = waitS; s > 0 && !cancelRef.current; s--) {
           setProgress(`${totals.remaining} left — next run in ${s}s`);
           await new Promise((r) => setTimeout(r, 1000));
         }
