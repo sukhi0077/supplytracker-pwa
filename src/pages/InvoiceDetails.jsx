@@ -17,6 +17,7 @@ import {
 import { buildSuggester } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
+import ItemPicker from "../components/ui/ItemPicker.jsx";
 import { Field, Btn } from "../components/ui/form.jsx";
 
 const money = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 }));
@@ -161,18 +162,12 @@ export default function InvoiceDetails({ isAdmin }) {
             ))}
           </div>
         )}
-        <select
-          value={r.itemId || ""}
-          onChange={(e) => openRemap(r, e.target.value || null)}
-          className={`w-full rounded-md border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
-            r.itemId ? "border-slate-300" : "border-amber-300 bg-amber-50"
-          }`}
-        >
-          <option value="">— unmapped —</option>
-          {itemOptions.map((it) => (
-            <option key={it.id} value={it.id}>{it.name}</option>
-          ))}
-        </select>
+        <ItemPicker
+          value={r.itemId || null}
+          onChange={(itemId) => openRemap(r, itemId)}
+          options={itemOptions}
+          title="Choose catalogue item"
+        />
       </div>
     );
   };
@@ -288,37 +283,50 @@ export default function InvoiceDetails({ isAdmin }) {
       >
         {pending && (
           <div className="space-y-3">
-            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
-              <div className="text-xs text-slate-400">KSeF line</div>
-              <div className="font-medium text-slate-800 break-words">{pending.row.ksefItemName || "—"}</div>
-              <div className="mt-1 text-slate-500">
-                → <span className="font-semibold text-slate-800">{pendItem?.name || "?"}</span>
-                {pendUnit ? <span className="ml-1 text-slate-400">· unit: {pendUnit}</span> : null}
-              </div>
+            {/* From → to, stacked on mobile so neither side gets squeezed. */}
+            <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm">
+              <div className="text-[11px] uppercase tracking-wide text-slate-400">KSeF line</div>
+              <div className="break-words font-medium text-slate-800">{pending.row.ksefItemName || "—"}</div>
+              <div className="my-1.5 text-slate-300">↓</div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-400">Catalogue item</div>
+              <div className="break-words font-semibold text-slate-800">{pendItem?.name || "?"}</div>
+              {pendUnit ? <div className="text-xs text-slate-400">unit: {pendUnit}</div> : null}
             </div>
 
-            <Field label="Pack size — base units per invoice unit (e.g. 10 for a 10 kg sack of a kg item)">
+            {/* Let them correct the target without closing the dialog. */}
+            <div>
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Item</span>
+              <ItemPicker
+                value={pending.itemId}
+                onChange={(itemId) => itemId && setPending({ ...pending, itemId })}
+                options={itemOptions}
+                title="Choose catalogue item"
+              />
+            </div>
+
+            <Field label="Pack size" hint="Base units per invoice unit — e.g. 10 for a 10 kg sack of a kg item.">
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.001"
                 min="0.001"
                 value={pending.packSize}
                 onChange={(e) => setPending({ ...pending, packSize: e.target.value })}
-                className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 sm:w-32 sm:py-2 sm:text-sm"
               />
             </Field>
 
-            <label className="flex items-start gap-2 text-sm text-slate-700">
+            <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={pending.saveMapping}
                 disabled={!pending.row.ksefItemName}
                 onChange={(e) => setPending({ ...pending, saveMapping: e.target.checked })}
-                className="mt-0.5"
+                className="mt-0.5 h-4 w-4 shrink-0"
               />
-              <span>
-                Save as KSeF mapping for <strong>{pending.row.supplierName || "this supplier"}</strong> — future fetches
-                of this line text map automatically (recommended).
+              <span className="min-w-0">
+                Save as KSeF mapping for <strong className="break-words">{pending.row.supplierName || "this supplier"}</strong> — future
+                fetches of this line text map automatically (recommended).
               </span>
             </label>
 
