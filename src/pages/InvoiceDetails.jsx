@@ -18,7 +18,7 @@ import { buildSuggester } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
 import ItemPicker from "../components/ui/ItemPicker.jsx";
-import { Field, Btn } from "../components/ui/form.jsx";
+import { Field, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
 
 const money = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 }));
 const num = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString());
@@ -109,15 +109,22 @@ export default function InvoiceDetails({ isAdmin }) {
     if (!pending) return;
     const { row, itemId, packSize, saveMapping } = pending;
     setPendingErr("");
+    // Fractional packs are legitimate (a 0.2 kg tub of a kg item), so the only
+    // rule is "a positive number" — never silently fall back to 1.
+    const pack = parseDecimal(packSize);
+    if (pack == null || pack <= 0) {
+      setPendingErr("Pack size must be a number greater than 0 (e.g. 0.2, 1, 10).");
+      return;
+    }
     try {
-      await remap.mutateAsync({ lineId: row.id, patch: { itemId, packSize } });
+      await remap.mutateAsync({ lineId: row.id, patch: { itemId, packSize: pack } });
       if (saveMapping && row.ksefItemName && itemId) {
         try {
           await addMapping.mutateAsync({
             ksefItemName: row.ksefItemName,
             itemId,
             supplierId: row.supplierId || null,
-            packSize: Number(packSize) || 1,
+            packSize: pack,
           });
         } catch {
           /* a mapping for this (name, supplier) may already exist — fine */
@@ -305,14 +312,11 @@ export default function InvoiceDetails({ isAdmin }) {
             </div>
 
             <Field label="Pack size" hint="Base units per invoice unit — e.g. 10 for a 10 kg sack of a kg item.">
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.001"
-                min="0.001"
+              <Decimal
                 value={pending.packSize}
-                onChange={(e) => setPending({ ...pending, packSize: e.target.value })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 sm:w-32 sm:py-2 sm:text-sm"
+                onChange={(v) => setPending({ ...pending, packSize: v })}
+                placeholder="1"
+                className="sm:w-32"
               />
             </Field>
 

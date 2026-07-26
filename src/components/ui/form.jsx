@@ -37,6 +37,39 @@ export function Num({ value, onChange, ...rest }) {
   );
 }
 
+// Parse a decimal typed with either separator. Returns null if it isn't a
+// usable number, so callers can show an error instead of silently defaulting.
+export const parseDecimal = (v) => {
+  const s = String(v ?? "").trim().replace(",", ".");
+  if (!s || !/^\d*\.?\d*$/.test(s) || s === ".") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+};
+
+// Decimal input as TEXT, not type="number".
+//
+// A Polish keyboard's decimal key is a comma, and <input type="number"> throws
+// away the ENTIRE value when it sees one — so typing "0,2" yields "" and the
+// field looks like it refuses decimals. This keeps the raw string, accepts both
+// separators, and normalises to a dot.
+export function Decimal({ value, onChange, className = "", ...rest }) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      className={`${base} ${className}`}
+      value={value ?? ""}
+      onChange={(e) => {
+        const raw = e.target.value.replace(",", ".");
+        // Allow intermediate states like "" and "0." while typing.
+        if (raw === "" || /^\d*\.?\d*$/.test(raw)) onChange(raw);
+      }}
+      {...rest}
+    />
+  );
+}
+
 export function Area({ value, onChange, rows = 3, ...rest }) {
   return (
     <textarea

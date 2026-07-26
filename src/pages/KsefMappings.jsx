@@ -9,7 +9,7 @@ import {
   useRemoveMapping,
 } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
-import { Field, Text, Num, Select, Btn } from "../components/ui/form.jsx";
+import { Field, Text, Select, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
 import Modal from "../components/ui/Modal.jsx";
 
 function Editor({ open, onClose, mapping }) {
@@ -42,9 +42,12 @@ function Editor({ open, onClose, mapping }) {
     setError("");
     if (!form.ksefItemName.trim()) return setError("KSeF item text is required.");
     if (!form.itemId) return setError("Pick the catalogue item.");
+    const pack = parseDecimal(form.packSize);
+    if (pack == null || pack <= 0) return setError("Pack size must be a number greater than 0 (e.g. 0.2, 1, 10).");
+    const payload = { ...form, packSize: pack };
     try {
-      if (isEdit) await update.mutateAsync({ id: mapping.id, patch: form });
-      else await add.mutateAsync(form);
+      if (isEdit) await update.mutateAsync({ id: mapping.id, patch: payload });
+      else await add.mutateAsync(payload);
       onClose();
     } catch (e) {
       setError(e.message || "Save failed.");
@@ -76,8 +79,8 @@ function Editor({ open, onClose, mapping }) {
         <Field label="Supplier" hint="Leave blank for a global mapping (any supplier).">
           <Select value={form.supplierId} onChange={set("supplierId")} options={(suppliers || []).map((s) => ({ value: s.id, label: s.name }))} />
         </Field>
-        <Field label="Pack size" hint="Base units per invoice unit (e.g. 10 for a 10 kg sack).">
-          <Num value={form.packSize} onChange={set("packSize")} min={0} />
+        <Field label="Pack size" hint="Base units per invoice unit — e.g. 10 for a 10 kg sack, or 0.2 for a 200 g tub.">
+          <Decimal value={form.packSize} onChange={set("packSize")} placeholder="1" />
         </Field>
       </div>
     </Modal>
