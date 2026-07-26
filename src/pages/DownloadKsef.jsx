@@ -4,7 +4,7 @@
 // actual KSeF calls run in the Cloudflare Worker (authenticated by your signed-in
 // admin session); the NIP + token are sent to it per run. Fetch history comes
 // from ksef_fetch_jobs.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useKsefJobs } from "../hooks/useCatalogue.js";
 import { KsefJobRepository } from "../repositories/KsefJobRepository.js";
@@ -33,6 +33,8 @@ export default function DownloadKsef({ isAdmin }) {
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
   const [note, setNote] = useState("");
+  const [progress, setProgress] = useState("");
+  const cancelRef = useRef(false);
 
   // Restore remembered creds on this device.
   useEffect(() => {
@@ -74,17 +76,64 @@ export default function DownloadKsef({ isAdmin }) {
         environment,
       });
       if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
-      if (path === "/auth-test") {
-        setNote(res.ok ? "✓ Signed in to KSeF successfully." : "KSeF login did not return a token.");
-      } else {
-        setSummary(res);
+      setNote(res.ok ? "✓ Signed in to KSeF successfully." : "KSeF login did not return a token.");
+    } catch (e) {
+      setError(e.message || "Request failed.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // Fetch invoices, auto-continuing while the worker reports invoices "left".
+  // Each round is a fresh worker invocation (fresh free-tier subrequest budget);
+  // the pause between rounds lets KSeF's rate limit cool down.
+  const MAX_ROUNDS = 8;
+  const WAIT_S = 20;
+  const runAll = async () => {
+    setError("");
+    setSummary(null);
+    setNote("");
+    if (!WORKER_URL) return setError("KSeF Worker URL is not configured (set VITE_KSEF_WORKER_URL).");
+    if (!nip.trim() || !token.trim()) return setError("Enter your NIP and KSeF token.");
+    setBusy("/run/ksef");
+    cancelRef.current = false;
+    const totals = { found: 0, created: 0, updated: 0, skipped: 0, remaining: 0, errors: [], note: "" };
+    try {
+      for (let round = 1; round <= MAX_ROUNDS; round++) {
+        setProgress(`Run ${round}${round > 1 ? ` — ${totals.remaining} left` : ""}…`);
+        const res = await KsefJobRepository.runFetch({
+          workerUrl: WORKER_URL,
+          path: "/run/ksef",
+          from,
+          to,
+          updateExisting,
+          nip: nip.trim(),
+          token: token.trim(),
+          environment,
+        });
+        totals.found = res.found ?? totals.found;
+        totals.created += res.created ?? 0;
+        totals.updated += res.updated ?? 0;
+        totals.skipped = res.skipped ?? totals.skipped;
+        totals.remaining = res.remaining ?? 0;
+        totals.errors = [...totals.errors, ...(res.errors || [])];
+        totals.note = res.note || "";
+        setSummary({ ...totals });
         qc.invalidateQueries({ queryKey: ["ksefJobs"] });
         qc.invalidateQueries({ queryKey: ["invoices"] });
+        if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
+        if (!totals.remaining || cancelRef.current || round === MAX_ROUNDS) break;
+        for (let s = WAIT_S; s > 0 && !cancelRef.current; s--) {
+          setProgress(`Run ${round} done — ${totals.remaining} left, continuing in ${s}s… (Stop to cancel)`);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        if (cancelRef.current) break;
       }
     } catch (e) {
       setError(e.message || "Request failed.");
     } finally {
       setBusy("");
+      setProgress("");
     }
   };
 
@@ -167,17 +216,22 @@ export default function DownloadKsef({ isAdmin }) {
               <Btn onClick={() => call("/auth-test")} disabled={!!busy || !WORKER_URL}>
                 {busy === "/auth-test" ? "Checking…" : "Test login"}
               </Btn>
-              <Btn variant="primary" onClick={() => call("/run/ksef")} disabled={!!busy || !WORKER_URL}>
-                {busy === "/run/ksef" ? "Fetching…" : "Fetch invoices"}
+              <Btn
+                variant={busy === "/run/ksef" ? "danger" : "primary"}
+                onClick={() => (busy === "/run/ksef" ? (cancelRef.current = true) : runAll())}
+                disabled={(!!busy && busy !== "/run/ksef") || !WORKER_URL}
+              >
+                {busy === "/run/ksef" ? "Stop" : "Fetch invoices"}
               </Btn>
             </div>
           </div>
 
+          {progress && <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">{progress}</div>}
           {error && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
           {note && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}
           {summary && (
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              Done — found {summary.found ?? "?"}, created {summary.created ?? 0}, updated {summary.updated ?? 0},
+              {busy === "/run/ksef" ? "So far" : "Done"} — found {summary.found ?? "?"}, created {summary.created ?? 0}, updated {summary.updated ?? 0},
               skipped {summary.skipped ?? 0}
               {summary.remaining ? `, ${summary.remaining} left (run again)` : ""}
               {summary.errors?.length ? `, ${summary.errors.length} error(s)` : ""}.
