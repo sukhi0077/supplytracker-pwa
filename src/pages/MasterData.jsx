@@ -21,7 +21,7 @@ export default function MasterData({ isAdmin }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Masterdata</h2>
           <p className="mb-4 mt-1 text-sm text-slate-500">
@@ -31,7 +31,7 @@ export default function MasterData({ isAdmin }) {
         {isAdmin && (
           <button
             onClick={() => setAllowDelete((v) => !v)}
-            className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
+            className={`shrink-0 self-start rounded-lg border px-3 py-1.5 text-sm font-semibold transition ${
               allowDelete
                 ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
                 : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"

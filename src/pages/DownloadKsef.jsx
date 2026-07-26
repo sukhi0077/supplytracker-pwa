@@ -119,7 +119,7 @@ export default function DownloadKsef({ isAdmin }) {
             <Field label="NIP">
               <Text value={nip} onChange={setNip} placeholder="1234567890" />
             </Field>
-            <Field label="KSeF token" className="sm:col-span-2" hint="Your KSeF authorization token. Encrypted in transit; used only for this run.">
+            <Field label="KSeF token" className="col-span-2" hint="Your KSeF authorization token. Encrypted in transit; used only for this run.">
               <Text type="password" value={token} onChange={setToken} placeholder="••••••••" />
             </Field>
           </div>
@@ -163,7 +163,7 @@ export default function DownloadKsef({ isAdmin }) {
               <input type="checkbox" checked={remember} onChange={(e) => persist(e.target.checked)} />
               Remember NIP &amp; token on this device
             </label>
-            <div className="ml-auto flex gap-2">
+            <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto">
               <Btn onClick={() => call("/auth-test")} disabled={!!busy || !WORKER_URL}>
                 {busy === "/auth-test" ? "Checking…" : "Test login"}
               </Btn>
@@ -204,7 +204,29 @@ export default function DownloadKsef({ isAdmin }) {
         <Card className="p-2"><Empty>No KSeF fetch runs recorded yet.</Empty></Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile: stacked cards. */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {(jobs.data || []).map((j) => (
+              <div key={j.id} className="p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-slate-700">{(j.started_at || "").replace("T", " ").slice(0, 16)}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">{j.environment}</span>
+                    <Pill value={j.status} />
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">{j.date_from} → {j.date_to}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                  <span className="text-slate-600">Found {j.invoices_found}</span>
+                  <span className="text-emerald-700">New {j.invoices_created}</span>
+                  <span className="text-slate-600">Upd {j.invoices_updated}</span>
+                  {j.error_count > 0 && <span className="text-red-600">Err {j.error_count}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop: table. */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
