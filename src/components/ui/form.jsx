@@ -14,10 +14,10 @@ export function Field({ label, children, hint, className = "" }) {
 const base =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:bg-slate-50";
 
-export function Text({ value, onChange, ...rest }) {
+export function Text({ value, onChange, className = "", ...rest }) {
   return (
     <input
-      className={base}
+      className={`${base} ${className}`}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       {...rest}

@@ -195,11 +195,11 @@ export default function DownloadKsef({ isAdmin }) {
           </div>
 
           <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Field label="From">
-              <Text type="date" value={from} onChange={setFrom} />
+            <Field label="From" className="min-w-0">
+              <Text type="date" value={from} onChange={setFrom} className="min-w-0" />
             </Field>
-            <Field label="To">
-              <Text type="date" value={to} onChange={setTo} />
+            <Field label="To" className="min-w-0">
+              <Text type="date" value={to} onChange={setTo} className="min-w-0" />
             </Field>
           </div>
 
