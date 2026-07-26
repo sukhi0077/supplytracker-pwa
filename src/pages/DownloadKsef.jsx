@@ -4,7 +4,8 @@
 // actual KSeF calls run in the Cloudflare Worker (authenticated by your signed-in
 // admin session); the NIP + token are sent to it per run. Fetch history comes
 // from ksef_fetch_jobs.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { startKsefFetch, cancelKsefFetch, subscribeKsefFetch } from "../lib/ksefFetchRunner.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useKsefJobs } from "../hooks/useCatalogue.js";
 import { KsefJobRepository } from "../repositories/KsefJobRepository.js";
@@ -31,10 +32,11 @@ export default function DownloadKsef({ isAdmin }) {
   const [updateExisting, setUpdateExisting] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [summary, setSummary] = useState(null);
   const [note, setNote] = useState("");
-  const [progress, setProgress] = useState("");
-  const cancelRef = useRef(false);
+  // Fetch-loop state lives in ksefFetchRunner (app-level), so the loop keeps
+  // running when this page unmounts; we just subscribe for display.
+  const [fs, setFs] = useState({ busy: false, progress: "", summary: null, error: "" });
+  useEffect(() => subscribeKsefFetch(setFs), []);
 
   // Restore remembered creds on this device.
   useEffect(() => {
@@ -59,7 +61,6 @@ export default function DownloadKsef({ isAdmin }) {
 
   const call = async (path) => {
     setError("");
-    setSummary(null);
     setNote("");
     if (!WORKER_URL) return setError("KSeF Worker URL is not configured (set VITE_KSEF_WORKER_URL).");
     if (!nip.trim() || !token.trim()) return setError("Enter your NIP and KSeF token.");
@@ -84,64 +85,31 @@ export default function DownloadKsef({ isAdmin }) {
     }
   };
 
-  // Fetch invoices, auto-continuing while the worker reports invoices "left".
-  // Each round is a fresh worker invocation (fresh free-tier subrequest budget);
-  // the pause between rounds lets KSeF's rate limit cool down.
-  const MAX_ROUNDS = 15;
-  const runAll = async () => {
+  // Start the app-level fetch loop (keeps running if you leave this page).
+  const runAll = () => {
     setError("");
-    setSummary(null);
     setNote("");
     if (!WORKER_URL) return setError("KSeF Worker URL is not configured (set VITE_KSEF_WORKER_URL).");
     if (!nip.trim() || !token.trim()) return setError("Enter your NIP and KSeF token.");
-    setBusy("/run/ksef");
-    cancelRef.current = false;
-    const totals = { found: 0, created: 0, updated: 0, skipped: 0, remaining: 0, errors: [], note: "" };
-    let candidatesTotal = 0;
-    try {
-      for (let round = 1; round <= MAX_ROUNDS; round++) {
-        setProgress(`Fetching (run ${round})…`);
-        const res = await KsefJobRepository.runFetch({
-          workerUrl: WORKER_URL,
-          path: "/run/ksef",
-          from,
-          to,
-          updateExisting,
-          nip: nip.trim(),
-          token: token.trim(),
-          environment,
-        });
-        totals.found = res.found ?? totals.found;
-        totals.created += res.created ?? 0;
-        totals.updated += res.updated ?? 0;
-        totals.skipped = res.skipped ?? totals.skipped;
-        // "Left" across the whole session: the worker only knows about one run,
-        // so count down from the first run's candidate total ourselves.
-        if (round === 1) candidatesTotal = totals.found - (res.skipped ?? 0);
-        totals.remaining = Math.min(res.remaining ?? 0, Math.max(0, candidatesTotal - totals.created - totals.updated));
-        totals.errors = [...totals.errors, ...(res.errors || [])];
-        totals.note = res.note || "";
-        setSummary({ ...totals });
-        qc.invalidateQueries({ queryKey: ["ksefJobs"] });
-        qc.invalidateQueries({ queryKey: ["invoices"] });
-        if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
-        if (!totals.remaining || cancelRef.current || round === MAX_ROUNDS) break;
-        // A round that processed few invoices was rate-limited — give KSeF's
-        // limit window a full minute to reset, otherwise a short breather.
-        const roundProcessed = (res.created ?? 0) + (res.updated ?? 0);
-        const waitS = roundProcessed >= 5 ? 20 : 60;
-        for (let s = waitS; s > 0 && !cancelRef.current; s--) {
-          setProgress(`${totals.remaining} left — next run in ${s}s`);
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-        if (cancelRef.current) break;
-      }
-    } catch (e) {
-      setError(e.message || "Request failed.");
-    } finally {
-      setBusy("");
-      setProgress("");
-    }
+    if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
+    startKsefFetch(
+      {
+        workerUrl: WORKER_URL,
+        path: "/run/ksef",
+        from,
+        to,
+        updateExisting,
+        nip: nip.trim(),
+        token: token.trim(),
+        environment,
+      },
+      {
+        onData: () => {
+          qc.invalidateQueries({ queryKey: ["ksefJobs"] });
+          qc.invalidateQueries({ queryKey: ["invoices"] });
+        },
+      },
+    );
   };
 
   return (
@@ -220,31 +188,31 @@ export default function DownloadKsef({ isAdmin }) {
               Remember credentials
             </label>
             <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto">
-              <Btn onClick={() => call("/auth-test")} disabled={!!busy || !WORKER_URL}>
+              <Btn onClick={() => call("/auth-test")} disabled={!!busy || fs.busy || !WORKER_URL}>
                 {busy === "/auth-test" ? "Checking…" : "Test login"}
               </Btn>
               <Btn
-                variant={busy === "/run/ksef" ? "danger" : "primary"}
-                onClick={() => (busy === "/run/ksef" ? (cancelRef.current = true) : runAll())}
-                disabled={(!!busy && busy !== "/run/ksef") || !WORKER_URL}
+                variant={fs.busy ? "danger" : "primary"}
+                onClick={() => (fs.busy ? cancelKsefFetch() : runAll())}
+                disabled={!!busy || !WORKER_URL}
               >
-                {busy === "/run/ksef" ? "Stop" : "Fetch invoices"}
+                {fs.busy ? "Stop" : "Fetch invoices"}
               </Btn>
             </div>
           </div>
 
-          {progress && <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">{progress}</div>}
-          {error && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+          {fs.progress && <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">{fs.progress}</div>}
+          {(error || fs.error) && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error || fs.error}</div>}
           {note && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}
-          {summary && (
+          {fs.summary && (
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              {busy === "/run/ksef" ? "So far" : "Done"}: {summary.found ?? "?"} found · {summary.created ?? 0} new · {summary.updated ?? 0} updated
-              {summary.remaining ? ` · ${summary.remaining} left` : ""}
-              {summary.errors?.length ? ` · ${summary.errors.length} error(s)` : ""}
-              {summary.note ? <div className="mt-1 text-xs text-emerald-700">{summary.note}</div> : null}
-              {summary.errors?.length ? (
+              {fs.busy ? "So far" : "Done"}: {fs.summary.found ?? "?"} found · {fs.summary.created ?? 0} new · {fs.summary.updated ?? 0} updated
+              {fs.summary.remaining ? ` · ${fs.summary.remaining} left` : ""}
+              {fs.summary.errors?.length ? ` · ${fs.summary.errors.length} error(s)` : ""}
+              {fs.summary.note ? <div className="mt-1 text-xs text-emerald-700">{fs.summary.note}</div> : null}
+              {fs.summary.errors?.length ? (
                 <div className="mt-1 max-h-24 overflow-y-auto text-xs text-red-700">
-                  {summary.errors.slice(0, 8).map((e, i) => (
+                  {fs.summary.errors.slice(0, 8).map((e, i) => (
                     <div key={i}>{e}</div>
                   ))}
                 </div>
