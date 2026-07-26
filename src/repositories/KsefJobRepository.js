@@ -4,7 +4,7 @@
 import { supabase, withTimeout, unwrap } from "../supabase.js";
 
 export class KsefJobRepository {
-  static async getRecent({ limit = 25 } = {}) {
+  static async getRecent({ limit = 5 } = {}) {
     try {
       const { data, error } = await withTimeout(
         supabase

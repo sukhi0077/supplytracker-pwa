@@ -124,7 +124,28 @@ export default function DownloadKsef({ isAdmin }) {
             </Field>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* Overlapping 8-day presets — each window shares one day with the
+              adjacent one so no invoice slips through a gap between weekly runs. */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">Quick range:</span>
+            <button
+              type="button"
+              onClick={() => { setFrom(daysAgo(7)); setTo(today()); }}
+              className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              This week (8d)
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFrom(daysAgo(14)); setTo(daysAgo(7)); }}
+              className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Last week (8d)
+            </button>
+            <span className="text-[11px] text-slate-400">windows overlap by 1 day to avoid gaps</span>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="From">
               <Text type="date" value={from} onChange={setFrom} />
             </Field>
