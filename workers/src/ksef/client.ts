@@ -224,11 +224,32 @@ export class KsefClient {
   }
 
   // 7. Fetch one invoice's XML by KSeF number. GET /invoices/ksef/{ksefNumber}.
+  //
+  // KSeF rate-limits invoice downloads hard, so this retries on 429/503 with
+  // backoff (honouring Retry-After). Retries cost subrequests, so attempts are
+  // capped and a long Retry-After is treated as "not this run" — the invoice is
+  // simply left for the next run rather than stalling the whole invocation.
   async fetchInvoiceXml(ksefReference: string): Promise<string> {
-    const resp = await fetch(`${this.base}/invoices/ksef/${encodeURIComponent(ksefReference)}`, {
-      headers: { Authorization: `Bearer ${this.bearer()}` },
-    });
-    if (!resp.ok) throw new Error(`fetch invoice ${ksefReference} -> ${resp.status}`);
-    return await resp.text();
+    const MAX_ATTEMPTS = 3;
+    const MAX_WAIT_MS = 20000;
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const resp = await fetch(`${this.base}/invoices/ksef/${encodeURIComponent(ksefReference)}`, {
+        headers: { Authorization: `Bearer ${this.bearer()}` },
+      });
+      if (resp.ok) return await resp.text();
+      lastStatus = resp.status;
+      if (resp.status !== 429 && resp.status !== 503) {
+        throw new Error(`fetch invoice ${ksefReference} -> ${resp.status}`);
+      }
+      if (attempt === MAX_ATTEMPTS - 1) break;
+      const hinted = Number(resp.headers.get("Retry-After") || "");
+      const wait = Number.isFinite(hinted) && hinted > 0 ? hinted * 1000 : 3000 * 2 ** attempt;
+      if (wait > MAX_WAIT_MS) break; // too long to hold the worker — retry next run
+      await sleep(wait);
+    }
+    throw new Error(
+      `fetch invoice ${ksefReference} -> ${lastStatus} (rate limited; it will be retried on the next run)`,
+    );
   }
 }

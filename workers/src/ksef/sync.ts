@@ -14,7 +14,17 @@ import { normalizeKsefName } from "./matching.js";
 
 // Max NEW invoices to fully fetch+write per invocation, to stay under the 50
 // subrequest cap. Each new invoice costs ~3-4 subrequests.
-const MAX_NEW_PER_RUN = 8;
+const MAX_NEW_PER_RUN = 6;
+
+// KSeF rate-limits invoice downloads, so space them out a little. Sleeping is
+// wall-clock only — it costs no subrequests and no CPU budget.
+const PACE_MS = 1500;
+
+// If KSeF rate-limits us this many times in a row, stop early: the remaining
+// invoices are reported as "left" and picked up by the next run.
+const RATE_LIMIT_GIVE_UP = 2;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface FetchResult {
   found: number;
@@ -23,6 +33,7 @@ export interface FetchResult {
   skipped: number;
   remaining: number;
   errors: string[];
+  note?: string;
 }
 
 interface SupplierRec {
@@ -173,12 +184,18 @@ export async function runKsefFetch(
     // Batch: which of these are already imported (by ksef_reference)?
     const refList = refs.map((r) => r.ksefReference);
     const existingMap = new Map<string, string>();
+    // When re-importing we also need to know how stale each row is, so a
+    // capped run can rotate through them instead of redoing the same ones.
+    const staleness = new Map<string, number>();
     if (refList.length) {
       const { data: existing } = await db
         .from("invoices")
-        .select("id, ksef_reference")
+        .select("id, ksef_reference, updated_at")
         .in("ksef_reference", refList);
-      for (const e of existing || []) existingMap.set(e.ksef_reference as string, e.id as string);
+      for (const e of existing || []) {
+        existingMap.set(e.ksef_reference as string, e.id as string);
+        staleness.set(e.ksef_reference as string, Date.parse(String(e.updated_at || "")) || 0);
+      }
     }
 
     const suppliers = await loadSuppliers(db);
@@ -189,22 +206,32 @@ export async function runKsefFetch(
     const candidates = refs.filter(
       (r) => opts.updateExisting || !existingMap.has(r.ksefReference),
     );
+    // Already-imported invoices we're not updating cost nothing here.
+    res.skipped = refs.length - candidates.length;
+
+    // Ordering matters because the run is capped. Never-imported invoices go
+    // first (they're the whole point), then already-imported ones oldest-
+    // updated first — so each re-run touches a DIFFERENT slice and the run
+    // actually makes progress instead of rewriting the same 8 rows forever.
+    candidates.sort((a, b) => {
+      const sa = existingMap.has(a.ksefReference) ? staleness.get(a.ksefReference)! : -1;
+      const sb = existingMap.has(b.ksefReference) ? staleness.get(b.ksefReference)! : -1;
+      return sa - sb;
+    });
 
     let processed = 0;
+    let rateLimitStreak = 0;
     for (const ref of candidates) {
-      // Already-imported invoices we're not updating cost nothing here.
-      if (!opts.updateExisting && existingMap.has(ref.ksefReference)) {
-        res.skipped++;
-        continue;
-      }
-      if (processed >= MAX_NEW_PER_RUN) {
+      if (processed >= MAX_NEW_PER_RUN || rateLimitStreak >= RATE_LIMIT_GIVE_UP) {
         res.remaining++;
         continue;
       }
+      if (processed > 0) await sleep(PACE_MS);
       processed++;
 
       try {
         const xml = await client.fetchInvoiceXml(ref.ksefReference);
+        rateLimitStreak = 0;
         const inv = parseFa(xml);
         const supplierId = await resolveSupplier(db, suppliers, inv);
 
@@ -281,14 +308,25 @@ export async function runKsefFetch(
           if (moves.length) await db.from("stock_movements").insert(moves);
         }
       } catch (e) {
-        res.errors.push(`${ref.ksefReference}: ${(e as Error).message}`);
+        const msg = (e as Error).message;
+        if (/-> (429|503)\b/.test(msg)) {
+          // Rate-limited: not a real error — the invoice is untouched and the
+          // next run will pick it up (never-imported ones sort first anyway).
+          rateLimitStreak++;
+          res.remaining++;
+        } else {
+          res.errors.push(`${ref.ksefReference}: ${msg}`);
+        }
       }
     }
 
     const note =
       res.remaining > 0
-        ? `${res.remaining} invoice(s) not processed this run (free-tier subrequest budget) — run again to continue.`
+        ? rateLimitStreak >= RATE_LIMIT_GIVE_UP
+          ? `Stopped early — KSeF rate-limited the downloads. ${res.remaining} invoice(s) left; wait a minute and run again.`
+          : `${res.remaining} invoice(s) not processed this run (free-tier subrequest budget) — run again to continue.`
         : "";
+    res.note = note;
     await finish(res.errors.length ? "partial" : "success", note);
   } catch (e) {
     res.errors.push((e as Error).message);
