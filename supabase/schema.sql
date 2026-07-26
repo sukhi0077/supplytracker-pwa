@@ -126,7 +126,7 @@ create table if not exists public.invoices (
   vat_total      numeric(12,2) not null default 0,
   gross_total    numeric(12,2) not null default 0,
   status         text not null default 'fetched'
-                 check (status in ('draft','fetched','matched','mismatch','paid')),
+                 check (status in ('draft','fetched','matched','mismatch','paid','manual')),
   match_status   text not null default '',
   -- wFirma mirror (populated by the wFirma Worker; read-only in the app)
   wfirma_id             text not null default '',
@@ -142,6 +142,11 @@ create index if not exists invoices_issue_date_idx on public.invoices (issue_dat
 create index if not exists invoices_supplier_idx   on public.invoices (supplier_id);
 create index if not exists invoices_ksef_ref_idx   on public.invoices (ksef_reference);
 create index if not exists invoices_number_idx     on public.invoices (number);
+-- Ensure the status check allows 'manual' (for existing DBs — create-table above
+-- is a no-op once the table exists).
+alter table public.invoices drop constraint if exists invoices_status_check;
+alter table public.invoices add constraint invoices_status_check
+  check (status in ('draft','fetched','matched','mismatch','paid','manual'));
 
 -- ---- invoice_lines ----------------------------------------------------------
 create table if not exists public.invoice_lines (

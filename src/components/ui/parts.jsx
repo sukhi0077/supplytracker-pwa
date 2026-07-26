@@ -60,6 +60,7 @@ const PILL = {
   mismatch: "bg-orange-100 text-orange-700",
   fetched: "bg-sky-100 text-sky-700",
   draft: "bg-slate-100 text-slate-600",
+  manual: "bg-indigo-100 text-indigo-700",
   running: "bg-sky-100 text-sky-700",
   success: "bg-emerald-100 text-emerald-700",
   partial: "bg-amber-100 text-amber-700",

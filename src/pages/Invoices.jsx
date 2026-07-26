@@ -81,7 +81,7 @@ export default function Invoices({ isAdmin }) {
                     onClick={() => setViewId(i.id)}
                     className="cursor-pointer hover:bg-slate-50"
                   >
-                    <td className="px-4 py-2.5 font-medium text-slate-900">{i.number}</td>
+                    <td className="px-4 py-2.5 font-medium text-teal-700 underline decoration-teal-300 underline-offset-2 hover:decoration-teal-600">{i.number}</td>
                     <td className="px-4 py-2.5 text-slate-600">{i.supplierName}</td>
                     <td className="px-4 py-2.5 text-slate-600">{i.issue_date}</td>
                     <td className="px-4 py-2.5 text-right text-slate-600">

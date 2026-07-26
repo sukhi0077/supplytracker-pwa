@@ -97,7 +97,7 @@ export default function InvoiceEditor({ open, onClose, invoiceId = null }) {
         net_total: totals.net,
         vat_total: totals.vat,
         gross_total: totals.gross,
-        status: isEdit ? loaded?.status || "draft" : "draft",
+        status: isEdit ? loaded?.status || "manual" : "manual",
       };
       const dbLines = lines.map((l, i) => ({
         line_no: i + 1,
