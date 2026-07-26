@@ -105,6 +105,11 @@ export const useRemoveSubCategory = () =>
 // ---- invoices --------------------------------------------------------------
 export const useCreateInvoice = () =>
   useInvalidating(({ header, lines }) => InvoiceRepository.createWithLines(header, lines), ["invoices"]);
+export const useUpdateInvoiceFull = () =>
+  useInvalidating(
+    ({ id, header, lines }) => InvoiceRepository.updateWithLines(id, header, lines),
+    ["invoices", "invoiceLines", "invoice"],
+  );
 export const useSetLineItem = () =>
   useInvalidating(({ lineId, itemId }) => InvoiceRepository.setLineItem(lineId, itemId), ["invoiceLines"]);
 export const useRemapLine = () =>

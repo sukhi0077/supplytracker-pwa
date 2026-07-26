@@ -1,9 +1,9 @@
 // src/components/InvoiceEditor.jsx
 // Manual invoice entry: header + line items. Totals are computed from the lines.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Modal from "./ui/Modal.jsx";
 import { Field, Text, Num, Select, Btn } from "./ui/form.jsx";
-import { useSuppliers, useItems, useCreateInvoice } from "../hooks/useCatalogue.js";
+import { useSuppliers, useItems, useInvoice, useCreateInvoice, useUpdateInvoiceFull } from "../hooks/useCatalogue.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = () => ({
@@ -17,10 +17,13 @@ const emptyLine = () => ({
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
-export default function InvoiceEditor({ open, onClose }) {
+export default function InvoiceEditor({ open, onClose, invoiceId = null }) {
+  const isEdit = !!invoiceId;
   const { data: suppliers } = useSuppliers();
   const { data: items } = useItems();
   const create = useCreateInvoice();
+  const updateFull = useUpdateInvoiceFull();
+  const { data: loaded } = useInvoice(isEdit ? invoiceId : null);
 
   const [supplierId, setSupplierId] = useState(null);
   const [number, setNumber] = useState("");
@@ -37,6 +40,30 @@ export default function InvoiceEditor({ open, onClose }) {
     setLines([emptyLine()]);
     setError("");
   };
+
+  // On open: preload the invoice when editing, else start blank.
+  useEffect(() => {
+    if (!open) return;
+    if (isEdit && loaded) {
+      setSupplierId(loaded.supplier_id || null);
+      setNumber(loaded.number || "");
+      setIssueDate(loaded.issue_date || today());
+      setCurrency(loaded.currency || "PLN");
+      const mapped = (loaded.lines || []).map((l) => ({
+        item_id: l.item_id || null,
+        ksef_item_name_raw: l.ksef_item_name_raw || "",
+        quantity: Number(l.quantity ?? 0),
+        unit: l.unit || "szt",
+        net_unit: Number(l.net_unit ?? 0),
+        vat_rate: Number(l.vat_rate ?? 0),
+      }));
+      setLines(mapped.length ? mapped : [emptyLine()]);
+      setError("");
+    } else if (!isEdit) {
+      reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isEdit, loaded]);
 
   const setLine = (i, patch) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -70,7 +97,7 @@ export default function InvoiceEditor({ open, onClose }) {
         net_total: totals.net,
         vat_total: totals.vat,
         gross_total: totals.gross,
-        status: "draft",
+        status: isEdit ? loaded?.status || "draft" : "draft",
       };
       const dbLines = lines.map((l, i) => ({
         line_no: i + 1,
@@ -85,8 +112,12 @@ export default function InvoiceEditor({ open, onClose }) {
         vat_amount: computed[i].vat,
         gross_total: computed[i].gross,
       }));
-      await create.mutateAsync({ header, lines: dbLines });
-      reset();
+      if (isEdit) {
+        await updateFull.mutateAsync({ id: invoiceId, header, lines: dbLines });
+      } else {
+        await create.mutateAsync({ header, lines: dbLines });
+        reset();
+      }
       onClose();
     } catch (e) {
       setError(e.message || "Save failed.");
@@ -97,13 +128,13 @@ export default function InvoiceEditor({ open, onClose }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="New invoice"
+      title={isEdit ? "Edit invoice" : "New invoice"}
       wide
       footer={
         <>
           <Btn onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" onClick={save} disabled={create.isPending}>
-            {create.isPending ? "Saving…" : "Save invoice"}
+          <Btn variant="primary" onClick={save} disabled={create.isPending || updateFull.isPending}>
+            {create.isPending || updateFull.isPending ? "Saving…" : isEdit ? "Save changes" : "Save invoice"}
           </Btn>
         </>
       }

@@ -102,6 +102,37 @@ export class InvoiceRepository {
     return true;
   }
 
+  // Update a manually-entered invoice's header and REPLACE its lines.
+  static async updateWithLines(id, header, lines = []) {
+    unwrap(
+      await withTimeout(
+        supabase
+          .from("invoices")
+          .update({ ...header, updated_at: new Date().toISOString() })
+          .eq("id", id),
+        15000,
+        "Updating invoice",
+      ),
+      "Updating invoice",
+    );
+    unwrap(
+      await withTimeout(
+        supabase.from("invoice_lines").delete().eq("invoice_id", id),
+        15000,
+        "Updating invoice lines",
+      ),
+      "Updating invoice lines",
+    );
+    if (lines.length) {
+      const rows = lines.map((l, i) => ({ ...l, invoice_id: id, line_no: l.line_no ?? i + 1 }));
+      unwrap(
+        await withTimeout(supabase.from("invoice_lines").insert(rows), 20000, "Saving invoice lines"),
+        "Saving invoice lines",
+      );
+    }
+    return true;
+  }
+
   // Invoice LINE items across all invoices — the "Invoice details" view. Joins
   // the parent invoice (number/date/supplier) and the mapped catalogue item.
   static async getLines({ unmappedOnly = false, search = "", limit = 300 } = {}) {

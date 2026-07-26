@@ -13,7 +13,13 @@ export default function Invoices({ isAdmin }) {
   const { data, isLoading, error } = useInvoices();
   const [q, setQ] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editInvoiceId, setEditInvoiceId] = useState(null); // null = new
   const [viewId, setViewId] = useState(null);
+
+  const openNew = () => { setEditInvoiceId(null); setEditorOpen(true); };
+  const openEdit = (id) => { setEditInvoiceId(id); setEditorOpen(true); };
+  // Only manually-entered invoices (no KSeF reference) are editable.
+  const isManual = (i) => !i.ksef_reference;
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -30,7 +36,7 @@ export default function Invoices({ isAdmin }) {
       <PageHeader
         title="Invoices"
         subtitle="Supplier invoices in the shared database."
-        right={isAdmin && <Btn variant="primary" onClick={() => setEditorOpen(true)}>+ New invoice</Btn>}
+        right={isAdmin && <Btn variant="primary" onClick={openNew}>+ New invoice</Btn>}
       />
 
       <div className="mb-4">
@@ -65,6 +71,7 @@ export default function Invoices({ isAdmin }) {
                   <th className="px-4 py-3 font-semibold text-right">Net</th>
                   <th className="px-4 py-3 font-semibold text-right">Gross</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
+                  {isAdmin && <th className="px-4 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -86,6 +93,20 @@ export default function Invoices({ isAdmin }) {
                     <td className="px-4 py-2.5">
                       <Pill value={i.status} />
                     </td>
+                    {isAdmin && (
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                        {isManual(i) ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEdit(i.id); }}
+                            className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50"
+                          >
+                            Edit
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400" title="Fetched from KSeF — edit in KSeF, not here">KSeF</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -94,7 +115,9 @@ export default function Invoices({ isAdmin }) {
         </Card>
       )}
 
-      {isAdmin && <InvoiceEditor open={editorOpen} onClose={() => setEditorOpen(false)} />}
+      {isAdmin && (
+        <InvoiceEditor open={editorOpen} onClose={() => setEditorOpen(false)} invoiceId={editInvoiceId} />
+      )}
       <InvoiceView open={!!viewId} onClose={() => setViewId(null)} invoiceId={viewId} />
     </div>
   );
