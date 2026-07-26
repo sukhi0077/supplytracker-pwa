@@ -100,7 +100,7 @@ export default function DownloadKsef({ isAdmin }) {
     const totals = { found: 0, created: 0, updated: 0, skipped: 0, remaining: 0, errors: [], note: "" };
     try {
       for (let round = 1; round <= MAX_ROUNDS; round++) {
-        setProgress(`Run ${round}${round > 1 ? ` — ${totals.remaining} left` : ""}…`);
+        setProgress(`Fetching (run ${round})…`);
         const res = await KsefJobRepository.runFetch({
           workerUrl: WORKER_URL,
           path: "/run/ksef",
@@ -124,7 +124,7 @@ export default function DownloadKsef({ isAdmin }) {
         if (remember) localStorage.setItem(LS, JSON.stringify({ nip, token, environment }));
         if (!totals.remaining || cancelRef.current || round === MAX_ROUNDS) break;
         for (let s = WAIT_S; s > 0 && !cancelRef.current; s--) {
-          setProgress(`Run ${round} done — ${totals.remaining} left, continuing in ${s}s… (Stop to cancel)`);
+          setProgress(`${totals.remaining} left — next run in ${s}s`);
           await new Promise((r) => setTimeout(r, 1000));
         }
         if (cancelRef.current) break;
@@ -182,16 +182,16 @@ export default function DownloadKsef({ isAdmin }) {
               onClick={() => { setFrom(daysAgo(7)); setTo(today()); }}
               className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
-              This week (8d)
+              This week
             </button>
             <button
               type="button"
               onClick={() => { setFrom(daysAgo(14)); setTo(daysAgo(7)); }}
               className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Last week (8d)
+              Last week
             </button>
-            <span className="text-[11px] text-slate-400">windows overlap by 1 day to avoid gaps</span>
+            <span className="hidden text-[11px] text-slate-400 sm:inline" title="8-day windows overlapping by 1 day so nothing slips through">8-day windows, 1-day overlap</span>
           </div>
 
           <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -203,14 +203,14 @@ export default function DownloadKsef({ isAdmin }) {
             </Field>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-4">
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={updateExisting} onChange={(e) => setUpdateExisting(e.target.checked)} />
-              Update existing invoices
+              Update existing
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-slate-600" title="Remember NIP & token on this device">
               <input type="checkbox" checked={remember} onChange={(e) => persist(e.target.checked)} />
-              Remember NIP &amp; token on this device
+              Remember credentials
             </label>
             <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto">
               <Btn onClick={() => call("/auth-test")} disabled={!!busy || !WORKER_URL}>
@@ -231,10 +231,9 @@ export default function DownloadKsef({ isAdmin }) {
           {note && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{note}</div>}
           {summary && (
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              {busy === "/run/ksef" ? "So far" : "Done"} — found {summary.found ?? "?"}, created {summary.created ?? 0}, updated {summary.updated ?? 0},
-              skipped {summary.skipped ?? 0}
-              {summary.remaining ? `, ${summary.remaining} left (run again)` : ""}
-              {summary.errors?.length ? `, ${summary.errors.length} error(s)` : ""}.
+              {busy === "/run/ksef" ? "So far" : "Done"}: {summary.found ?? "?"} found · {summary.created ?? 0} new · {summary.updated ?? 0} updated
+              {summary.remaining ? ` · ${summary.remaining} left` : ""}
+              {summary.errors?.length ? ` · ${summary.errors.length} error(s)` : ""}
               {summary.note ? <div className="mt-1 text-xs text-emerald-700">{summary.note}</div> : null}
               {summary.note ? <div className="mt-1 text-xs text-emerald-700">{summary.note}</div> : null}
               {summary.errors?.length ? (

@@ -323,10 +323,10 @@ export async function runKsefFetch(
     const note =
       res.remaining > 0
         ? rateLimitStreak >= RATE_LIMIT_GIVE_UP
-          ? `Stopped early — KSeF rate-limited the downloads. ${res.remaining} invoice(s) left; wait a minute and run again.`
+          ? `KSeF rate limit hit — ${res.remaining} left.`
           : opts.updateExisting && res.created === 0
-            ? `All ${res.found} invoices are already imported — this run refreshed ${res.updated} of them (oldest first); ${res.remaining} not refreshed this run. Untick "Update existing invoices" if you only want new ones.`
-            : `${res.remaining} invoice(s) not processed this run (free-tier subrequest budget) — run again to continue.`
+            ? `All ${res.found} already imported — refreshed ${res.updated}; untick "Update existing" for new only.`
+            : `${res.remaining} left (per-run cap).`
         : "";
     res.note = note;
     await finish(res.errors.length ? "partial" : "success", note);
