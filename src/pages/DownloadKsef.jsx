@@ -98,6 +98,7 @@ export default function DownloadKsef({ isAdmin }) {
     setBusy("/run/ksef");
     cancelRef.current = false;
     const totals = { found: 0, created: 0, updated: 0, skipped: 0, remaining: 0, errors: [], note: "" };
+    let candidatesTotal = 0;
     try {
       for (let round = 1; round <= MAX_ROUNDS; round++) {
         setProgress(`Fetching (run ${round})…`);
@@ -115,7 +116,10 @@ export default function DownloadKsef({ isAdmin }) {
         totals.created += res.created ?? 0;
         totals.updated += res.updated ?? 0;
         totals.skipped = res.skipped ?? totals.skipped;
-        totals.remaining = res.remaining ?? 0;
+        // "Left" across the whole session: the worker only knows about one run,
+        // so count down from the first run's candidate total ourselves.
+        if (round === 1) candidatesTotal = totals.found - (res.skipped ?? 0);
+        totals.remaining = Math.min(res.remaining ?? 0, Math.max(0, candidatesTotal - totals.created - totals.updated));
         totals.errors = [...totals.errors, ...(res.errors || [])];
         totals.note = res.note || "";
         setSummary({ ...totals });
