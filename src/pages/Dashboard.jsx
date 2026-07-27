@@ -41,6 +41,7 @@ const PRESETS = [
   { key: "12m", label: "12M" },
   { key: "ytd", label: "YTD" },
   { key: "all", label: "All" },
+  { key: "custom", label: "Custom" },
 ];
 
 const TABS = [
@@ -52,7 +53,19 @@ const TABS = [
 export default function Dashboard() {
   const [preset, setPreset] = useState("12m");
   const [tab, setTab] = useState("overview");
-  const { from, to } = useMemo(() => rangeFor(preset), [preset]);
+  // Custom range seeds from the last 12 months so the inputs open on something
+  // sensible rather than empty.
+  const [customFrom, setCustomFrom] = useState(() => rangeFor("12m").from);
+  const [customTo, setCustomTo] = useState(() => iso(new Date()));
+
+  const { from, to } = useMemo(() => {
+    if (preset !== "custom") return rangeFor(preset);
+    // Tolerate the dates being entered the wrong way round.
+    const a = customFrom || undefined;
+    const b = customTo || undefined;
+    if (a && b && a > b) return { from: b, to: a };
+    return { from: a, to: b };
+  }, [preset, customFrom, customTo]);
 
   const analytics = usePurchaseAnalytics(from, to);
   const items = useItems();
@@ -158,6 +171,32 @@ export default function Dashboard() {
           </div>
         }
       />
+
+      {preset === "custom" && (
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">From</span>
+            <input
+              type="date"
+              value={customFrom || ""}
+              max={customTo || undefined}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">To</span>
+            <input
+              type="date"
+              value={customTo || ""}
+              min={customFrom || undefined}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </label>
+          <span className="pb-2 text-xs text-slate-400">applies to every tab</span>
+        </div>
+      )}
 
       {/* Tabs — scrollable rather than wrapping on a narrow phone. */}
       <div className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1 pb-1">

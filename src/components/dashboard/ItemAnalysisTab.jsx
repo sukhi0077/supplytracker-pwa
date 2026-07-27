@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { Card, Empty } from "../ui/parts.jsx";
 import ItemPicker from "../ui/ItemPicker.jsx";
+import ItemTrendTable from "./ItemTrendTable.jsx";
 import { ChartCard, Kpi, BarList, money0, money2, money4, qty, monthLabel } from "./common.jsx";
 
 const dayLabel = (d) => (d || "").slice(5); // MM-DD — the year is on the range picker
@@ -142,6 +143,17 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
 
   return (
     <div className="space-y-4">
+      {/* Every item at a glance — three lines per row. Clicking a row loads it
+          into the detail view below. */}
+      <ChartCard title="All items — quantity, gross and unit price">
+        <ItemTrendTable
+          lines={lines}
+          invoiceById={invoiceById}
+          itemMap={itemMap}
+          onPickItem={setItemId}
+        />
+      </ChartCard>
+
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
