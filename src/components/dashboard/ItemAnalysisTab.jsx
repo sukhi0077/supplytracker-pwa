@@ -338,22 +338,34 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                   key: s.name,
                   name: s.name,
                   value: s.avgBase || 0,
-                  sub: `${s.orders} order${s.orders === 1 ? "" : "s"} · ${qty(s.qtyBase)} ${baseUnit} · ${money0(s.net)} · last ${moneyUnit(s.last)}`,
+                  sub: `${s.orders} order${s.orders === 1 ? "" : "s"} · ${qty(s.qtyBase)} ${baseUnit} · ${money2(s.net)} · last ${moneyUnit(s.last)}`,
                 }))}
                 format={moneyUnit}
                 emptyLabel="No supplier data."
               />
-              {model.suppliers.length > 1 && model.suppliers[0].avgBase > 0 && (
-                <p className="mt-2 text-xs text-slate-500">
-                  Switching everything to <strong>{model.suppliers[0].name}</strong> at its average price would have cost{" "}
-                  {money0(model.suppliers[0].avgBase * model.baseQty)} instead of {money0(model.spend)} —
-                  a difference of{" "}
-                  <strong className={model.spend - model.suppliers[0].avgBase * model.baseQty > 0 ? "text-emerald-600" : "text-slate-600"}>
-                    {money0(Math.max(0, model.spend - model.suppliers[0].avgBase * model.baseQty))}
-                  </strong>
-                  .
-                </p>
-              )}
+              {(() => {
+                // Rounded once, then subtracted — formatting each figure
+                // separately produced "14 instead of 18, a difference of 5".
+                const best = model.suppliers[0];
+                if (model.suppliers.length < 2 || !(best?.avgBase > 0)) return null;
+                const would = Math.round(best.avgBase * model.baseQty * 100) / 100;
+                const actual = Math.round(model.spend * 100) / 100;
+                const saved = Math.round((actual - would) * 100) / 100;
+                if (saved <= 0) {
+                  return (
+                    <p className="mt-2 text-xs text-slate-500">
+                      You're already buying at or below <strong>{best.name}</strong>'s average.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Switching everything to <strong>{best.name}</strong> at its average price would have cost{" "}
+                    {money2(would)} instead of {money2(actual)} — a difference of{" "}
+                    <strong className="text-emerald-600">{money2(saved)}</strong>.
+                  </p>
+                );
+              })()}
             </ChartCard>
           </div>
 

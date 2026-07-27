@@ -58,7 +58,11 @@ export function ChartCard({ title, right, children, className = "" }) {
 // Horizontal bar list — reads better than a chart on a phone and needs no
 // recharts layout maths for long labels.
 export function BarList({ rows, format = money0, onPick, emptyLabel = "Nothing here yet." }) {
-  const max = rows[0]?.value || 1;
+  // Scale to the largest value, NOT to rows[0]. Most callers pass rows sorted
+  // descending so the two coincide, but the supplier list is sorted cheapest
+  // first — there rows[0] is the smallest, and dividing by it sent the widest
+  // bar to ~1000% and straight out of the card.
+  const max = rows.reduce((m, r) => Math.max(m, Number(r.value) || 0), 0) || 1;
   if (!rows.length) return <p className="py-6 text-center text-sm text-slate-400">{emptyLabel}</p>;
   return (
     <div className="space-y-1.5">
@@ -72,7 +76,10 @@ export function BarList({ rows, format = money0, onPick, emptyLabel = "Nothing h
             <div className="mt-1 h-2 rounded-full bg-slate-100">
               <div
                 className="h-2 rounded-full"
-                style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: COLORS[i % COLORS.length] }}
+                style={{
+                  width: `${Math.min(100, Math.max(2, ((Number(r.value) || 0) / max) * 100))}%`,
+                  background: COLORS[i % COLORS.length],
+                }}
               />
             </div>
             {r.sub && <div className="mt-0.5 text-[11px] text-slate-400">{r.sub}</div>}
