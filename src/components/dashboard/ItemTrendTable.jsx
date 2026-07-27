@@ -50,6 +50,10 @@ function toPath(pts) {
 const dayLabel = (d) =>
   new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
 
+// Tolerant match: "Online portal", "online-portal", "ONLINE PORTAL" all count.
+const PORTAL = /online[\s_-]*portal/i;
+const isPortal = (r) => PORTAL.test(r.subCategory || "");
+
 function Delta({ value, lowerIsBetter }) {
   if (value == null) return <span className="text-slate-300">—</span>;
   const flat = Math.abs(value) < 0.01;
@@ -65,6 +69,8 @@ function Delta({ value, lowerIsBetter }) {
 export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem }) {
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [hidePortal, setHidePortal] = useState(false);
+  const [sort, setSort] = useState("change");
 
   const { rows, span } = useMemo(() => {
     // One bucket per (item, purchase date) — every order becomes a point.
@@ -116,6 +122,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
         name: info?.name || "(item)",
         unit: info?.unit || "",
         category: info?.category || "",
+        subCategory: info?.subCategory || "",
         days,
         qtyP: at((d) => d.qty),
         grossP: at((d) => d.gross),
@@ -127,7 +134,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
         orders: it.orders.size,
         points: days.length,
       };
-    }).sort((a, b) => b.gross - a.gross);
+    });
 
     return {
       rows,
@@ -135,11 +142,33 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
     };
   }, [lines, invoiceById, itemMap]);
 
+  // Items in the online-portal sub-category are matched on name rather than id,
+  // since the id isn't known here. If this ever stops matching, the count next
+  // to the checkbox reads 0 and the mismatch is visible rather than silent.
+  const portalCount = useMemo(() => rows.filter(isPortal).length, [rows]);
+
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
-    if (!n) return rows;
-    return rows.filter((r) => r.name.toLowerCase().includes(n) || (r.category || "").toLowerCase().includes(n));
-  }, [rows, q]);
+    let out = hidePortal ? rows.filter((r) => !isPortal(r)) : rows;
+    if (n) {
+      out = out.filter(
+        (r) =>
+          r.name.toLowerCase().includes(n) ||
+          (r.category || "").toLowerCase().includes(n) ||
+          (r.subCategory || "").toLowerCase().includes(n),
+      );
+    }
+    // Biggest price rise first. Items bought only once have no change to
+    // measure, so they sort last rather than counting as 0%.
+    return [...out].sort((a, b) => {
+      if (sort === "spend") return b.gross - a.gross;
+      const av = a.change, bv = b.change;
+      if (av == null && bv == null) return b.gross - a.gross;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return bv - av;
+    });
+  }, [rows, q, hidePortal, sort]);
 
   const shown = showAll || q.trim() ? filtered : filtered.slice(0, 20);
 
@@ -160,6 +189,17 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
           placeholder="Filter items…"
           className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
         />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={hidePortal}
+            onChange={(e) => setHidePortal(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Exclude Online portal
+          <span className="text-xs text-slate-400">({portalCount})</span>
+        </label>
+
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
           {SERIES.map((s) => (
             <span key={s.key} className="flex items-center gap-1.5">
@@ -180,8 +220,24 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
               <th className="w-52 py-2 pr-3 font-semibold">Item</th>
               <th className="py-2 pr-3 font-semibold">Quantity · gross · unit price</th>
               <th className="w-24 py-2 pr-3 text-right font-semibold">Qty</th>
-              <th className="w-24 py-2 pr-3 text-right font-semibold">Gross</th>
-              <th className="w-32 py-2 text-right font-semibold">Price / unit</th>
+              <th className="w-24 py-2 pr-3 text-right font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSort("spend")}
+                  className={`uppercase tracking-wide hover:text-slate-600 ${sort === "spend" ? "text-slate-700 underline" : ""}`}
+                >
+                  Gross
+                </button>
+              </th>
+              <th className="w-32 py-2 text-right font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSort("change")}
+                  className={`uppercase tracking-wide hover:text-slate-600 ${sort === "change" ? "text-slate-700 underline" : ""}`}
+                >
+                  Price / unit {sort === "change" ? "↓" : ""}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -263,12 +319,14 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
 
       <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
         <span>
-          {shown.length} of {rows.length} items
+          {shown.length} of {filtered.length} items
+          {hidePortal && portalCount > 0 && ` · ${portalCount} online-portal item${portalCount === 1 ? "" : "s"} hidden`}
+          {sort === "change" ? " · sorted by biggest price rise" : " · sorted by spend"}
           {span == null && " · all purchases fall on one day"}
         </span>
-        {!q.trim() && rows.length > 20 && (
+        {!q.trim() && filtered.length > 20 && (
           <button onClick={() => setShowAll((v) => !v)} className="font-semibold text-teal-600 hover:underline">
-            {showAll ? "Show top 20" : `Show all ${rows.length}`}
+            {showAll ? "Show top 20" : `Show all ${filtered.length}`}
           </button>
         )}
       </div>
