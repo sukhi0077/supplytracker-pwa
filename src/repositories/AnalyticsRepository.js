@@ -14,7 +14,7 @@ async function linesForInvoices(ids) {
         supabase
           .from("invoice_lines")
           .select(
-            "id, invoice_id, item_id, quantity, unit, pack_size, net_unit, gross_unit, net_total, gross_total, ksef_item_name_raw",
+            "id, invoice_id, item_id, quantity, unit, pack_size, net_unit, gross_unit, net_total, gross_total, discount, ksef_item_name_raw",
           )
           .in("invoice_id", slice),
         20000,
@@ -54,15 +54,24 @@ export class AnalyticsRepository {
       lines: lines.map((l) => {
         const qty = Number(l.quantity || 0);
         const net = Number(l.net_total || 0);
-        // Unit price: prefer the stated one, else derive it from the total.
-        // Some suppliers only populate totals.
-        const netUnit = l.net_unit != null && l.net_unit !== "" ? Number(l.net_unit) : qty ? net / qty : null;
-        const grossUnit =
-          l.gross_unit != null && l.gross_unit !== ""
+        const gross = Number(l.gross_total || 0);
+
+        // In FA(3), P_9A (net_unit) is the LIST price before any discount, and
+        // P_11 (net_total) is what you were actually charged for the line. When
+        // a supplier discounts — MAKRO routinely does — those disagree, and
+        // using the list price makes the same contract price look like it moved.
+        // So the effective unit price is always derived from the line total;
+        // the stated price is kept alongside as listUnit.
+        const listUnit = l.net_unit != null && l.net_unit !== "" ? Number(l.net_unit) : null;
+        const netUnit = qty ? net / qty : listUnit;
+        const grossUnit = qty
+          ? gross / qty
+          : l.gross_unit != null && l.gross_unit !== ""
             ? Number(l.gross_unit)
-            : qty
-              ? Number(l.gross_total || 0) / qty
-              : null;
+            : null;
+        const discount = Number(l.discount || 0);
+        const discounted = listUnit != null && netUnit != null && Math.abs(listUnit - netUnit) > 0.005;
+
         // pack_size = base units per invoice unit, so base-unit price is
         // unitPrice / pack. That's what makes a 10 kg sack comparable to a 1 kg bag.
         const pack = Number(l.pack_size || 1) || 1;
@@ -75,12 +84,15 @@ export class AnalyticsRepository {
           unit: l.unit || "",
           packSize: pack,
           netUnit,
+          listUnit,
+          discount,
+          discounted,
           grossUnit,
           netPerBase: netUnit == null ? null : netUnit / pack,
           grossPerBase: grossUnit == null ? null : grossUnit / pack,
           baseQuantity: qty * pack,
           net,
-          gross: Number(l.gross_total || 0),
+          gross,
         };
       }),
     };

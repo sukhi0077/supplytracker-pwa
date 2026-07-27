@@ -307,7 +307,14 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                       <td className="py-1.5 pr-3 text-slate-600">{r.supplierName}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{qty(r.quantity)} {r.unit}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums text-slate-400">{qty(r.packSize)}</td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{moneyUnit(r.netUnit)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
+                        {moneyUnit(r.netUnit)}
+                        {r.discounted && (
+                          <div className="text-[11px] text-slate-400" title="List price on the invoice, before the discount">
+                            list <span className="line-through">{moneyUnit(r.listUnit)}</span>
+                          </div>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-3 text-right font-medium tabular-nums text-slate-800">{moneyUnit(r.netPerBase)}</td>
                       <td className="py-1.5 text-right tabular-nums text-slate-600">{money2(r.net)}</td>
                     </tr>
