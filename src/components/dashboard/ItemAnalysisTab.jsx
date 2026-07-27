@@ -2,15 +2,15 @@
 // One item, everything about it: how the price moved, how often you buy it,
 // how much you buy, and which supplier is actually cheapest.
 //
-// Two price series are plotted because they answer different questions:
-//   • per invoice unit — what the supplier billed (matches the paper invoice)
-//   • per base unit    — unit price ÷ pack size, so a 10 kg sack and a 1 kg bag
-//                        are comparable. A jump in one but not the other means
-//                        the pack changed, not the price.
+// The price chart plots ONE series: net price per base unit (unit price ÷ pack
+// size). That's the only figure comparable over time once suppliers use
+// different packs — a 1.8 kg case and a 0.2 kg tub are not the same quantity,
+// so charting "as billed" alongside it just drew a second line in a different
+// unit. The as-billed price is a per-row fact and stays in the purchases table.
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis,
+  ResponsiveContainer, LineChart, Line, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, BarChart,
 } from "recharts";
 import { Card, Empty } from "../ui/parts.jsx";
@@ -20,6 +20,29 @@ import ItemTrendTable from "./ItemTrendTable.jsx";
 import { ChartCard, Kpi, BarList, money0, money2, moneyUnit, qty, monthLabel } from "./common.jsx";
 
 const dayLabel = (d) => (d || "").slice(5); // MM-DD — the year is on the range picker
+
+// Colours are assigned by position within THIS item's supplier list rather
+// than hashed from the name — hashing collided (Farutex and Selgros landed on
+// the same colour), and two identical dots in one chart is the one thing the
+// colour has to avoid. You look at one item at a time, so per-chart
+// distinctness beats colour stability across items.
+const SUPPLIER_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7", "#008300", "#e34948"];
+const MIXED = "#94a3b8";
+
+// Recharts dot renderer — one dot per purchase, filled by that day's supplier.
+function SupplierDot({ cx, cy, payload, colorFor }) {
+  if (cx == null || cy == null || payload?.perBase == null) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={4}
+      fill={colorFor(payload.supplier)}
+      stroke="#fff"
+      strokeWidth={1.5}
+    />
+  );
+}
 
 export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptions }) {
   const [itemId, setItemId] = useState(null);
@@ -89,11 +112,15 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
     // several lines, e.g. two invoices the same day).
     const byDate = new Map();
     for (const r of rows) {
-      if (!byDate.has(r.date)) byDate.set(r.date, { date: r.date, qtyBase: 0, qtyInv: 0, net: 0, netUnitW: 0, netBaseW: 0 });
+      if (!byDate.has(r.date)) {
+        byDate.set(r.date, { date: r.date, qtyBase: 0, qtyInv: 0, net: 0, netUnitW: 0, netBaseW: 0, suppliers: new Set(), packs: new Set() });
+      }
       const d = byDate.get(r.date);
       d.net += r.net;
       d.qtyBase += r.baseQuantity || 0;
       d.qtyInv += r.quantity || 0;
+      d.suppliers.add(r.supplierName);
+      d.packs.add(r.packSize);
       if (r.netUnit != null) d.netUnitW += r.netUnit * (r.quantity || 1);
       if (r.netPerBase != null) d.netBaseW += r.netPerBase * (r.baseQuantity || 1);
     }
@@ -102,10 +129,13 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
       .map((d) => ({
         date: d.date,
         label: dayLabel(d.date),
-        perUnit: d.qtyInv ? +(d.netUnitW / d.qtyInv).toFixed(2) : null,
+        // Only the pack-adjusted price is charted; see the chart comment.
         perBase: d.qtyBase ? +(d.netBaseW / d.qtyBase).toFixed(2) : null,
+        asBilled: d.qtyInv ? +(d.netUnitW / d.qtyInv).toFixed(2) : null,
         qtyBase: +d.qtyBase.toFixed(3),
         net: Math.round(d.net),
+        supplier: d.suppliers.size === 1 ? [...d.suppliers][0] : "Several suppliers",
+        pack: d.packs.size === 1 ? [...d.packs][0] : null,
       }));
 
     // Monthly volume + spend.
@@ -154,6 +184,11 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
 
   const info = itemId ? itemMap.get(itemId) : null;
   const baseUnit = info?.unit || "base unit";
+
+  const supplierColor = useMemo(() => {
+    const map = new Map((model?.suppliers || []).map((s, i) => [s.name, SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]]));
+    return (name) => map.get(name) || MIXED;
+  }, [model]);
 
   return (
     <div className="space-y-4">
@@ -219,29 +254,63 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
             />
           </div>
 
+          {/* One line, one unit.
+              The old chart also plotted "per invoice unit" (as billed), but a
+              1.8 kg MAKRO case and a 0.2 kg Farutex tub aren't the same
+              quantity — that line jumped between 39.87 and 4.44 and meant
+              nothing as a series. Only the pack-adjusted price is comparable
+              over time, so it's the only thing charted. The as-billed figure
+              is a per-row fact and lives in the purchases table below.
+              Dots are coloured by supplier, which is what actually explains a
+              step in the line. */}
           <ChartCard
-            title="Price over time (net)"
-            right={<span className="text-[11px] text-slate-400">bars = quantity bought</span>}
+            title={`Price per ${baseUnit} over time (net)`}
+            right={<span className="text-[11px] text-slate-400">dot colour = supplier</span>}
           >
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={model.series} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={290}>
+              <LineChart data={model.series} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="price" tick={{ fontSize: 11 }} width={52} tickFormatter={(v) => v.toFixed(2)} />
-                <YAxis yAxisId="qty" orientation="right" tick={{ fontSize: 11 }} width={44} />
-                <Tooltip
-                  formatter={(v, n) => (n === "Quantity" ? `${qty(v)} ${baseUnit}` : moneyUnit(v))}
-                  labelFormatter={(l, p) => p?.[0]?.payload?.date || l}
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  width={58}
+                  domain={["auto", "auto"]}
+                  tickFormatter={(v) => Number(v).toFixed(2)}
                 />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar yAxisId="qty" dataKey="qtyBase" name="Quantity" fill="#e2e8f0" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="price" type="monotone" dataKey="perBase" name={`Per ${baseUnit}`} stroke="#0d9488" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                <Line yAxisId="price" type="monotone" dataKey="perUnit" name="Per invoice unit" stroke="#7c3aed" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} connectNulls />
-              </ComposedChart>
+                <Tooltip
+                  formatter={(v) => [moneyUnit(v), `Per ${baseUnit}`]}
+                  labelFormatter={(l, p) => {
+                    const d = p?.[0]?.payload;
+                    if (!d) return l;
+                    return `${d.date} · ${d.supplier}${d.pack ? ` · pack ${qty(d.pack)}` : ""}`;
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="perBase"
+                  name={`Per ${baseUnit}`}
+                  stroke="#0d9488"
+                  strokeWidth={2}
+                  connectNulls
+                  dot={<SupplierDot colorFor={supplierColor} />}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
             </ResponsiveContainer>
+
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+              {model.suppliers.map((s) => (
+                <span key={s.name} className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: supplierColor(s.name) }} />
+                  {s.name}
+                </span>
+              ))}
+            </div>
+
             {model.packs.length > 1 && (
-              <p className="mt-2 text-xs text-amber-600">
-                Pack size varies ({model.packs.join(", ")}) — where the two lines diverge, the pack changed rather than the price.
+              <p className="mt-2 text-xs text-slate-500">
+                Pack sizes differ ({model.packs.map((p) => qty(p)).join(", ")}), so every price here is divided by its pack
+                — a {qty(model.packs[model.packs.length - 1])} case and a {qty(model.packs[0])} tub are directly comparable.
               </p>
             )}
           </ChartCard>
