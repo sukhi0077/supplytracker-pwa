@@ -36,11 +36,11 @@ export function fillLineGross(a: FillArgs): [number | null, number | null] {
   let gt = a.grossTotal;
   const nonzeroQty = qty !== null && qty !== 0;
 
-  // gross unit
+  // gross unit — 2dp, matching every other stored figure
   if (gu === null) {
-    gu = grossFromNet(nu, a.vatRate, 4);
+    gu = grossFromNet(nu, a.vatRate, 2);
     if (gu === null && nu !== null && vamt !== null && nonzeroQty) {
-      gu = round(nu + vamt / (qty as number), 4);
+      gu = round(nu + vamt / (qty as number), 2);
     }
   }
 
@@ -53,7 +53,7 @@ export function fillLineGross(a: FillArgs): [number | null, number | null] {
 
   // backfill a missing unit from a known total
   if (gu === null && gt !== null && nonzeroQty) {
-    gu = round(gt / (qty as number), 4);
+    gu = round(gt / (qty as number), 2);
   }
 
   return [gu, gt];

@@ -7,7 +7,7 @@
 //   • per base unit    — unit price ÷ pack size, so a 10 kg sack and a 1 kg bag
 //                        are comparable. A jump in one but not the other means
 //                        the pack changed, not the price.
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis,
@@ -16,12 +16,22 @@ import {
 import { Card, Empty } from "../ui/parts.jsx";
 import ItemPicker from "../ui/ItemPicker.jsx";
 import ItemTrendTable from "./ItemTrendTable.jsx";
-import { ChartCard, Kpi, BarList, money0, money2, money4, qty, monthLabel } from "./common.jsx";
+import { ChartCard, Kpi, BarList, money0, money2, moneyUnit, qty, monthLabel } from "./common.jsx";
 
 const dayLabel = (d) => (d || "").slice(5); // MM-DD — the year is on the range picker
 
 export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptions }) {
   const [itemId, setItemId] = useState(null);
+  const detailRef = useRef(null);
+
+  // Picking a row in the table above should carry you down to the detail —
+  // otherwise the page looks like nothing happened.
+  const pickAndScroll = useCallback((id) => {
+    setItemId(id);
+    requestAnimationFrame(() =>
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }, []);
 
   // Only offer items that actually appear in this period — picking an item with
   // no purchases is a dead end.
@@ -88,9 +98,9 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
       .map((d) => ({
         date: d.date,
         label: dayLabel(d.date),
-        perUnit: d.qtyInv ? +(d.netUnitW / d.qtyInv).toFixed(4) : null,
-        perBase: d.qtyBase ? +(d.netBaseW / d.qtyBase).toFixed(4) : null,
-        qtyBase: +d.qtyBase.toFixed(3),
+        perUnit: d.qtyInv ? +(d.netUnitW / d.qtyInv).toFixed(2) : null,
+        perBase: d.qtyBase ? +(d.netBaseW / d.qtyBase).toFixed(2) : null,
+        qtyBase: +d.qtyBase.toFixed(2),
         net: Math.round(d.net),
       }));
 
@@ -150,10 +160,11 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
           lines={lines}
           invoiceById={invoiceById}
           itemMap={itemMap}
-          onPickItem={setItemId}
+          onPickItem={pickAndScroll}
         />
       </ChartCard>
 
+      <div ref={detailRef} className="scroll-mt-4" />
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -194,12 +205,12 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
             <Kpi label="Times ordered" value={model.orders} sub={model.cadence ? `every ~${Math.round(model.cadence)} days` : "single order"} tone="teal" />
             <Kpi label="Total spend" value={money0(model.spend)} sub={`net · ${money0(model.grossSpend)} gross`} />
             <Kpi label="Quantity" value={qty(model.baseQty)} sub={baseUnit} />
-            <Kpi label="Avg price" value={money4(model.avg)} sub={`per ${baseUnit}, weighted`} />
-            <Kpi label="Latest price" value={money4(model.last)} sub={model.lastDate} />
+            <Kpi label="Avg price" value={moneyUnit(model.avg)} sub={`per ${baseUnit}, weighted`} />
+            <Kpi label="Latest price" value={moneyUnit(model.last)} sub={model.lastDate} />
             <Kpi
               label="Price change"
               value={model.change == null ? "—" : `${model.change > 0 ? "+" : ""}${(model.change * 100).toFixed(1)}%`}
-              sub={`${money4(model.min)} – ${money4(model.max)}`}
+              sub={`${moneyUnit(model.min)} – ${moneyUnit(model.max)}`}
               tone={model.change == null ? "slate" : model.change > 0.02 ? "red" : model.change < -0.02 ? "green" : "slate"}
             />
           </div>
@@ -215,7 +226,7 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                 <YAxis yAxisId="price" tick={{ fontSize: 11 }} width={52} tickFormatter={(v) => v.toFixed(2)} />
                 <YAxis yAxisId="qty" orientation="right" tick={{ fontSize: 11 }} width={44} />
                 <Tooltip
-                  formatter={(v, n) => (n === "Quantity" ? `${qty(v)} ${baseUnit}` : money4(v))}
+                  formatter={(v, n) => (n === "Quantity" ? `${qty(v)} ${baseUnit}` : moneyUnit(v))}
                   labelFormatter={(l, p) => p?.[0]?.payload?.date || l}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -254,9 +265,9 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                   key: s.name,
                   name: s.name,
                   value: s.avgBase || 0,
-                  sub: `${s.orders} order${s.orders === 1 ? "" : "s"} · ${qty(s.qtyBase)} ${baseUnit} · ${money0(s.net)} · last ${money4(s.last)}`,
+                  sub: `${s.orders} order${s.orders === 1 ? "" : "s"} · ${qty(s.qtyBase)} ${baseUnit} · ${money0(s.net)} · last ${moneyUnit(s.last)}`,
                 }))}
-                format={money4}
+                format={moneyUnit}
                 emptyLabel="No supplier data."
               />
               {model.suppliers.length > 1 && model.suppliers[0].avgBase > 0 && (
@@ -296,8 +307,8 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                       <td className="py-1.5 pr-3 text-slate-600">{r.supplierName}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{qty(r.quantity)} {r.unit}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums text-slate-400">{qty(r.packSize)}</td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{money4(r.netUnit)}</td>
-                      <td className="py-1.5 pr-3 text-right font-medium tabular-nums text-slate-800">{money4(r.netPerBase)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{moneyUnit(r.netUnit)}</td>
+                      <td className="py-1.5 pr-3 text-right font-medium tabular-nums text-slate-800">{moneyUnit(r.netPerBase)}</td>
                       <td className="py-1.5 text-right tabular-nums text-slate-600">{money2(r.net)}</td>
                     </tr>
                   ))}

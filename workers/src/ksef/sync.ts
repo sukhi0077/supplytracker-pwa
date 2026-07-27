@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Env } from "../lib/supabase.js";
 import { KsefClient } from "./client.js";
 import { parseFa, type ParsedInvoice } from "./parser.js";
-import { fillLineGross } from "./money.js";
+import { fillLineGross, round } from "./money.js";
 import { normalizeKsefName } from "./matching.js";
 
 // Max NEW invoices to fully fetch+write per invocation, to stay under the 50
@@ -235,6 +235,9 @@ export async function runKsefFetch(
         const inv = parseFa(xml);
         const supplierId = await resolveSupplier(db, suppliers, inv);
 
+        // Everything numeric is stored at 2dp — KSeF occasionally sends more.
+        const r2 = (v: number | null | undefined) => round(v ?? null, 2);
+
         const header = {
           supplier_id: supplierId,
           number: inv.number,
@@ -243,9 +246,9 @@ export async function runKsefFetch(
           sale_date: inv.sale_date,
           due_date: inv.due_date,
           currency: inv.currency,
-          net_total: inv.net_total,
-          vat_total: inv.vat_total,
-          gross_total: inv.gross_total,
+          net_total: r2(inv.net_total),
+          vat_total: r2(inv.vat_total),
+          gross_total: r2(inv.gross_total),
           status: "fetched",
           updated_at: new Date().toISOString(),
         };
@@ -280,16 +283,16 @@ export async function runKsefFetch(
             line_no: l.line_no,
             item_id: mapped?.itemId ?? null,
             ksef_item_name_raw: l.ksef_item_name_raw,
-            quantity: l.quantity,
+            quantity: r2(l.quantity),
             unit: l.unit,
-            net_unit: l.net_unit,
-            gross_unit: l.gross_unit,
-            net_total: l.net_total,
-            vat_amount: l.vat_amount,
-            gross_total: grossTotal,
-            vat_rate: l.vat_rate,
-            discount: l.discount,
-            pack_size: mapped?.pack ?? 1,
+            net_unit: r2(l.net_unit),
+            gross_unit: r2(l.gross_unit),
+            net_total: r2(l.net_total),
+            vat_amount: r2(l.vat_amount),
+            gross_total: r2(grossTotal),
+            vat_rate: r2(l.vat_rate),
+            discount: r2(l.discount),
+            pack_size: r2(mapped?.pack ?? 1) ?? 1,
           };
         });
         if (lineRows.length) await db.from("invoice_lines").insert(lineRows);
@@ -299,7 +302,7 @@ export async function runKsefFetch(
             .filter((r) => r.item_id)
             .map((r) => ({
               item_id: r.item_id,
-              qty: Number(r.quantity) * Number(r.pack_size),
+              qty: round(Number(r.quantity) * Number(r.pack_size), 2),
               kind: "purchase_in",
               invoice_id: invoiceId,
               happened_at: inv.issue_date,

@@ -4,7 +4,8 @@ import Modal from "./ui/Modal.jsx";
 import { useInvoice } from "../hooks/useCatalogue.js";
 import { Loading, ErrorBox, Pill } from "./ui/parts.jsx";
 
-const money = (v) => (v == null ? "" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 }));
+const money = (v) => (v == null ? "" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const num = (v) => (v == null || v === "" ? "" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
 
 export default function InvoiceView({ open, onClose, invoiceId }) {
   const { data, isLoading, error } = useInvoice(invoiceId);
@@ -53,7 +54,7 @@ export default function InvoiceView({ open, onClose, invoiceId }) {
                   <tr key={l.id}>
                     <td className="px-3 py-2 text-slate-400">{l.line_no}</td>
                     <td className="px-3 py-2">{l.item?.name || l.ksef_item_name_raw}</td>
-                    <td className="px-3 py-2 text-right">{l.quantity} {l.unit}</td>
+                    <td className="px-3 py-2 text-right">{num(l.quantity)} {l.unit}</td>
                     <td className="px-3 py-2 text-right">{money(l.net_unit)}</td>
                     <td className="px-3 py-2 text-right">{l.vat_rate ?? ""}</td>
                     <td className="px-3 py-2 text-right font-medium">{money(l.gross_total)}</td>

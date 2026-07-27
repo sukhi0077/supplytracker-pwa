@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./ui/Modal.jsx";
 import { Field, Text, Num, Select, Btn } from "./ui/form.jsx";
 import { useSuppliers, useItems, useInvoice, useCreateInvoice, useUpdateInvoiceFull } from "../hooks/useCatalogue.js";
+import { round2or } from "../utils/number.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = () => ({
@@ -15,7 +16,7 @@ const emptyLine = () => ({
   vat_rate: 5,
 });
 
-const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const r2 = round2or;
 
 export default function InvoiceEditor({ open, onClose, invoiceId = null }) {
   const isEdit = !!invoiceId;
@@ -104,10 +105,10 @@ export default function InvoiceEditor({ open, onClose, invoiceId = null }) {
         item_id: l.item_id || null,
         ksef_item_name_raw:
           l.ksef_item_name_raw || (items || []).find((it) => it.id === l.item_id)?.name || "",
-        quantity: Number(l.quantity || 0),
+        quantity: r2(l.quantity),
         unit: l.unit || "szt",
-        net_unit: Number(l.net_unit || 0),
-        vat_rate: Number(l.vat_rate || 0),
+        net_unit: r2(l.net_unit),
+        vat_rate: r2(l.vat_rate),
         net_total: computed[i].net,
         vat_amount: computed[i].vat,
         gross_total: computed[i].gross,

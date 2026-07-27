@@ -8,7 +8,7 @@
 // the SHAPE of each line is faithful, the vertical position is not comparable
 // between series. Actual values live in the columns and the hover tooltip.
 import { useMemo, useState } from "react";
-import { money0, money4, qty as fmtQty } from "./common.jsx";
+import { money0, moneyUnit, qty as fmtQty } from "./common.jsx";
 
 const W = 320; // viewBox width; the svg itself stretches to the column
 const H = 40;
@@ -198,7 +198,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
                     aria-label={`${r.name}: quantity, gross and unit price trend`}
                   >
                     <title>
-                      {`${r.name} — latest: ${fmtQty(r.qtyS.filter(Boolean).pop())} ${r.unit}, ${money0(r.grossS.filter(Boolean).pop() || 0)}, ${money4(r.lastPrice)}/${r.unit || "unit"}`}
+                      {`${r.name} — latest: ${fmtQty(r.qtyS.filter(Boolean).pop())} ${r.unit}, ${money0(r.grossS.filter(Boolean).pop() || 0)}, ${moneyUnit(r.lastPrice)}/${r.unit || "unit"}`}
                     </title>
                     {SERIES.map((s) => {
                       const values = s.key === "qty" ? r.qtyS : s.key === "gross" ? r.grossS : r.priceS;
@@ -227,7 +227,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
                 </td>
                 <td className="py-2 pr-3 text-right align-middle tabular-nums text-slate-700">{money0(r.gross)}</td>
                 <td className="py-2 text-right align-middle">
-                  <div className="tabular-nums font-medium text-slate-800">{money4(r.lastPrice)}</div>
+                  <div className="tabular-nums font-medium text-slate-800">{moneyUnit(r.lastPrice)}</div>
                   <div className="mt-0.5"><Delta value={r.change} lowerIsBetter /></div>
                 </td>
               </tr>

@@ -7,7 +7,7 @@ import InvoiceEditor from "../components/InvoiceEditor.jsx";
 import InvoiceView from "../components/InvoiceView.jsx";
 
 const money = (v, ccy = "PLN") =>
-  v == null ? "" : `${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${ccy}`;
+  v == null ? "" : `${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy}`;
 
 export default function Invoices({ isAdmin }) {
   const { data, isLoading, error } = useInvoices();

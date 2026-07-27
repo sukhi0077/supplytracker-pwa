@@ -10,13 +10,14 @@ export const COLORS = [
 
 const pln = (opts) => new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN", ...opts });
 
+// Whole-currency, for headline totals where the grosze are noise.
 export const money0 = (n) => pln({ maximumFractionDigits: 0 }).format(n || 0);
+// Everything else is 2 decimal places — including unit prices, which used to
+// show 4 and no longer do.
 export const money2 = (n) => pln({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
-// Unit prices are small, so they get more precision than totals.
-export const money4 = (n) =>
-  n == null ? "—" : pln({ minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+export const moneyUnit = (n) => (n == null ? "—" : money2(n));
 export const qty = (n) =>
-  n == null ? "—" : Number(n).toLocaleString("pl-PL", { maximumFractionDigits: 3 });
+  n == null ? "—" : Number(n).toLocaleString("pl-PL", { maximumFractionDigits: 2 });
 
 export const monthLabel = (ym) => {
   const [y, m] = ym.split("-").map(Number);

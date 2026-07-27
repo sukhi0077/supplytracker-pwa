@@ -6,7 +6,7 @@ import { useSales, useImportSales } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import { Field, Text, Btn } from "../components/ui/form.jsx";
 
-const money = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+const money = (v) => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Minimal CSV parser (handles quoted fields + commas).
 function parseCsv(text) {
@@ -137,7 +137,7 @@ export default function SalesReport({ isAdmin }) {
           </button>
         )}
         <span className="ml-auto text-sm text-slate-500">
-          {totals.units.toLocaleString()} units · {money(totals.revenue)} revenue
+          {totals.units.toLocaleString(undefined, { maximumFractionDigits: 2 })} units · {money(totals.revenue)} revenue
         </span>
       </div>
 
