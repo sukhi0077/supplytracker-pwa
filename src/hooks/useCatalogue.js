@@ -120,10 +120,17 @@ export const useAddOrderLine = () => useInvalidating((row) => InvoiceDetailRepos
 export const useRemoveOrderLine = () => useInvalidating((id) => InvoiceDetailRepository.remove(id), ["orderLog"]);
 
 // ---- mappings --------------------------------------------------------------
-export const useAddMapping = () => useInvalidating((m) => KsefMappingRepository.add(m), ["ksefMappings"]);
+// A mapping edit can rewrite invoice_lines (see applyToExistingLines), so the
+// analytics / invoice caches have to go too — otherwise the dashboard keeps
+// serving the numbers it computed before the change.
+const MAPPING_KEYS = ["ksefMappings", "analytics", "invoices", "invoiceLines", "orderLog", "stockLevels"];
+
+export const useAddMapping = () => useInvalidating((m) => KsefMappingRepository.add(m), MAPPING_KEYS);
 export const useUpdateMapping = () =>
-  useInvalidating(({ id, patch }) => KsefMappingRepository.update(id, patch), ["ksefMappings"]);
-export const useRemoveMapping = () => useInvalidating((id) => KsefMappingRepository.remove(id), ["ksefMappings"]);
+  useInvalidating(({ id, patch }) => KsefMappingRepository.update(id, patch), MAPPING_KEYS);
+export const useRemoveMapping = () => useInvalidating((id) => KsefMappingRepository.remove(id), MAPPING_KEYS);
+export const useApplyMappingToLines = () =>
+  useInvalidating((m) => KsefMappingRepository.applyToExistingLines(m), MAPPING_KEYS);
 
 // ---- stock -----------------------------------------------------------------
 export const useAddMovement = () =>

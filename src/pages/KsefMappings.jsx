@@ -7,7 +7,9 @@ import {
   useAddMapping,
   useUpdateMapping,
   useRemoveMapping,
+  useApplyMappingToLines,
 } from "../hooks/useCatalogue.js";
+import { KsefMappingRepository } from "../repositories/KsefMappingRepository.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import { Field, Text, Select, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
 import Modal from "../components/ui/Modal.jsx";
@@ -18,8 +20,14 @@ function Editor({ open, onClose, mapping }) {
   const { data: suppliers } = useSuppliers();
   const add = useAddMapping();
   const update = useUpdateMapping();
+  const applyToLines = useApplyMappingToLines();
   const [form, setForm] = useState({ ksefItemName: "", itemId: null, supplierId: null, packSize: 1 });
   const [error, setError] = useState("");
+  // Existing invoice lines this mapping would rewrite. Mappings are applied at
+  // fetch time, so without this a mapping edit leaves old invoices untouched
+  // and the dashboard keeps reporting the previous item.
+  const [backfill, setBackfill] = useState(true);
+  const [matchCount, setMatchCount] = useState(null);
 
   // Sync form when opening.
   useEffect(() => {
@@ -38,6 +46,28 @@ function Editor({ open, onClose, mapping }) {
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Count affected lines as the name / supplier settle. Debounced so typing a
+  // name doesn't fire a query per keystroke.
+  useEffect(() => {
+    if (!open || !form.ksefItemName.trim()) {
+      setMatchCount(null);
+      return;
+    }
+    let alive = true;
+    const t = setTimeout(async () => {
+      try {
+        const lines = await KsefMappingRepository.findMatchingLines({
+          ksefItemName: form.ksefItemName,
+          supplierId: form.supplierId,
+        });
+        if (alive) setMatchCount(lines.length);
+      } catch {
+        if (alive) setMatchCount(null);
+      }
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
+  }, [open, form.ksefItemName, form.supplierId]);
+
   const save = async () => {
     setError("");
     if (!form.ksefItemName.trim()) return setError("KSeF item text is required.");
@@ -48,6 +78,14 @@ function Editor({ open, onClose, mapping }) {
     try {
       if (isEdit) await update.mutateAsync({ id: mapping.id, patch: payload });
       else await add.mutateAsync(payload);
+      if (backfill && matchCount > 0) {
+        await applyToLines.mutateAsync({
+          ksefItemName: payload.ksefItemName,
+          itemId: payload.itemId,
+          supplierId: payload.supplierId || null,
+          packSize: pack,
+        });
+      }
       onClose();
     } catch (e) {
       setError(e.message || "Save failed.");
@@ -82,6 +120,35 @@ function Editor({ open, onClose, mapping }) {
         <Field label="Pack size" hint="Base units per invoice unit — e.g. 10 for a 10 kg sack, or 0.2 for a 200 g tub.">
           <Decimal value={form.packSize} onChange={set("packSize")} placeholder="1" />
         </Field>
+
+        {/* Mappings only apply as invoices are fetched, so without this the
+            change affects nothing you've already imported. */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          {matchCount == null ? (
+            <p className="text-xs text-slate-400">Checking existing invoice lines…</p>
+          ) : matchCount === 0 ? (
+            <p className="text-xs text-slate-500">
+              No invoice lines already imported with this text — the mapping applies to future fetches only.
+            </p>
+          ) : (
+            <label className="flex items-start gap-2.5 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={backfill}
+                onChange={(e) => setBackfill(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
+              <span className="min-w-0">
+                Also update <strong>{matchCount}</strong> invoice line{matchCount === 1 ? "" : "s"} already imported with
+                this text.
+                <span className="mt-0.5 block text-[11px] text-slate-400">
+                  Without this, dashboard figures keep using the old mapping. Any manual per-line remap of these lines
+                  will be overwritten.
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
       </div>
     </Modal>
   );
