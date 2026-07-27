@@ -1,6 +1,9 @@
 // src/utils/number.js
-// One rounding rule for the whole app: money, quantities and anything else
-// derived from a calculation is stored and shown to 2 decimal places.
+// Money is stored and shown at 2 decimal places, everywhere.
+//
+// This is for MONEY only. Quantities, pack sizes and VAT rates keep their own
+// precision — 0.125 kg and a 0.125 pack are both legitimate, and rounding them
+// to 2dp would quietly corrupt the data.
 //
 // Number.EPSILON nudges the classic binary-float cases (1.005 would otherwise
 // round down to 1.00) onto the right side before Math.round.

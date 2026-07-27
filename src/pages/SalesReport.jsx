@@ -137,7 +137,7 @@ export default function SalesReport({ isAdmin }) {
           </button>
         )}
         <span className="ml-auto text-sm text-slate-500">
-          {totals.units.toLocaleString(undefined, { maximumFractionDigits: 2 })} units · {money(totals.revenue)} revenue
+          {totals.units.toLocaleString()} units · {money(totals.revenue)} revenue
         </span>
       </div>
 

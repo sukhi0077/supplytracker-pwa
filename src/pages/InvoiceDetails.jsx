@@ -19,11 +19,11 @@ import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/par
 import Modal from "../components/ui/Modal.jsx";
 import ItemPicker from "../components/ui/ItemPicker.jsx";
 import { Field, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
-import { round2 } from "../utils/number.js";
 
+// Money is 2dp; quantities and pack sizes keep their own precision.
 const FMT = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
 const money = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString(undefined, FMT));
-const num = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+const num = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString());
 
 export default function InvoiceDetails({ isAdmin }) {
   const [unmappedOnly, setUnmappedOnly] = useState(false);
@@ -113,7 +113,7 @@ export default function InvoiceDetails({ isAdmin }) {
     setPendingErr("");
     // Fractional packs are legitimate (a 0.2 kg tub of a kg item), so the only
     // rule is "a positive number" — never silently fall back to 1.
-    const pack = round2(parseDecimal(packSize));
+    const pack = parseDecimal(packSize);
     if (pack == null || pack <= 0) {
       setPendingErr("Pack size must be a number greater than 0 (e.g. 0.2, 1, 10).");
       return;

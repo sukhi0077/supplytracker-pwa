@@ -105,10 +105,10 @@ export default function InvoiceEditor({ open, onClose, invoiceId = null }) {
         item_id: l.item_id || null,
         ksef_item_name_raw:
           l.ksef_item_name_raw || (items || []).find((it) => it.id === l.item_id)?.name || "",
-        quantity: r2(l.quantity),
+        quantity: Number(l.quantity || 0),
         unit: l.unit || "szt",
         net_unit: r2(l.net_unit),
-        vat_rate: r2(l.vat_rate),
+        vat_rate: Number(l.vat_rate || 0),
         net_total: computed[i].net,
         vat_amount: computed[i].vat,
         gross_total: computed[i].gross,

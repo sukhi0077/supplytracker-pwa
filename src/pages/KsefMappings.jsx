@@ -11,7 +11,6 @@ import {
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import { Field, Text, Select, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
 import Modal from "../components/ui/Modal.jsx";
-import { round2 } from "../utils/number.js";
 
 function Editor({ open, onClose, mapping }) {
   const isEdit = !!mapping;
@@ -43,7 +42,7 @@ function Editor({ open, onClose, mapping }) {
     setError("");
     if (!form.ksefItemName.trim()) return setError("KSeF item text is required.");
     if (!form.itemId) return setError("Pick the catalogue item.");
-    const pack = round2(parseDecimal(form.packSize));
+    const pack = parseDecimal(form.packSize);
     if (pack == null || pack <= 0) return setError("Pack size must be a number greater than 0 (e.g. 0.2, 1, 10).");
     const payload = { ...form, packSize: pack };
     try {

@@ -235,7 +235,8 @@ export async function runKsefFetch(
         const inv = parseFa(xml);
         const supplierId = await resolveSupplier(db, suppliers, inv);
 
-        // Everything numeric is stored at 2dp — KSeF occasionally sends more.
+        // Money is stored at 2dp — KSeF occasionally sends more. Quantities,
+        // pack sizes and VAT rates keep whatever precision they arrived with.
         const r2 = (v: number | null | undefined) => round(v ?? null, 2);
 
         const header = {
@@ -283,16 +284,16 @@ export async function runKsefFetch(
             line_no: l.line_no,
             item_id: mapped?.itemId ?? null,
             ksef_item_name_raw: l.ksef_item_name_raw,
-            quantity: r2(l.quantity),
+            quantity: l.quantity,
             unit: l.unit,
             net_unit: r2(l.net_unit),
             gross_unit: r2(l.gross_unit),
             net_total: r2(l.net_total),
             vat_amount: r2(l.vat_amount),
             gross_total: r2(grossTotal),
-            vat_rate: r2(l.vat_rate),
+            vat_rate: l.vat_rate,
             discount: r2(l.discount),
-            pack_size: r2(mapped?.pack ?? 1) ?? 1,
+            pack_size: mapped?.pack ?? 1,
           };
         });
         if (lineRows.length) await db.from("invoice_lines").insert(lineRows);
@@ -302,7 +303,7 @@ export async function runKsefFetch(
             .filter((r) => r.item_id)
             .map((r) => ({
               item_id: r.item_id,
-              qty: round(Number(r.quantity) * Number(r.pack_size), 2),
+              qty: Number(r.quantity) * Number(r.pack_size),
               kind: "purchase_in",
               invoice_id: invoiceId,
               happened_at: inv.issue_date,

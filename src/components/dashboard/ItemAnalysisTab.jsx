@@ -100,7 +100,7 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
         label: dayLabel(d.date),
         perUnit: d.qtyInv ? +(d.netUnitW / d.qtyInv).toFixed(2) : null,
         perBase: d.qtyBase ? +(d.netBaseW / d.qtyBase).toFixed(2) : null,
-        qtyBase: +d.qtyBase.toFixed(2),
+        qtyBase: +d.qtyBase.toFixed(3),
         net: Math.round(d.net),
       }));
 

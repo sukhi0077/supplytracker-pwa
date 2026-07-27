@@ -12,12 +12,12 @@ const pln = (opts) => new Intl.NumberFormat("pl-PL", { style: "currency", curren
 
 // Whole-currency, for headline totals where the grosze are noise.
 export const money0 = (n) => pln({ maximumFractionDigits: 0 }).format(n || 0);
-// Everything else is 2 decimal places — including unit prices, which used to
-// show 4 and no longer do.
+// All other money is 2dp — including unit prices, which used to show 4.
 export const money2 = (n) => pln({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 export const moneyUnit = (n) => (n == null ? "—" : money2(n));
+// Quantities are NOT money — they keep their own precision (0.125 kg is real).
 export const qty = (n) =>
-  n == null ? "—" : Number(n).toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+  n == null ? "—" : Number(n).toLocaleString("pl-PL", { maximumFractionDigits: 3 });
 
 export const monthLabel = (ym) => {
   const [y, m] = ym.split("-").map(Number);

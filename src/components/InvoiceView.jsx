@@ -5,7 +5,7 @@ import { useInvoice } from "../hooks/useCatalogue.js";
 import { Loading, ErrorBox, Pill } from "./ui/parts.jsx";
 
 const money = (v) => (v == null ? "" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-const num = (v) => (v == null || v === "" ? "" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+const num = (v) => (v == null || v === "" ? "" : Number(v).toLocaleString());
 
 export default function InvoiceView({ open, onClose, invoiceId }) {
   const { data, isLoading, error } = useInvoice(invoiceId);
