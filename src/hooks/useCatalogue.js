@@ -103,17 +103,21 @@ export const useRemoveSubCategory = () =>
   useInvalidating((id) => MasterDataRepository.removeSubCategory(id), ["masterData"]);
 
 // ---- invoices --------------------------------------------------------------
+// Anything that writes to invoices or invoice_lines has to drop "analytics"
+// too: the dashboard aggregates those very rows, so remapping a line in
+// Invoice details changed the data but left the dashboard serving its cached
+// figures. Keep every invoice-touching mutation on this one list rather than
+// hand-picking keys per hook — that's how the gap appeared.
+const INVOICE_KEYS = ["invoices", "invoice", "invoiceLines", "analytics", "orderLog", "stockLevels"];
+
 export const useCreateInvoice = () =>
-  useInvalidating(({ header, lines }) => InvoiceRepository.createWithLines(header, lines), ["invoices"]);
+  useInvalidating(({ header, lines }) => InvoiceRepository.createWithLines(header, lines), INVOICE_KEYS);
 export const useUpdateInvoiceFull = () =>
-  useInvalidating(
-    ({ id, header, lines }) => InvoiceRepository.updateWithLines(id, header, lines),
-    ["invoices", "invoiceLines", "invoice"],
-  );
+  useInvalidating(({ id, header, lines }) => InvoiceRepository.updateWithLines(id, header, lines), INVOICE_KEYS);
 export const useSetLineItem = () =>
-  useInvalidating(({ lineId, itemId }) => InvoiceRepository.setLineItem(lineId, itemId), ["invoiceLines"]);
+  useInvalidating(({ lineId, itemId }) => InvoiceRepository.setLineItem(lineId, itemId), INVOICE_KEYS);
 export const useRemapLine = () =>
-  useInvalidating(({ lineId, patch }) => InvoiceRepository.remapLine(lineId, patch), ["invoiceLines"]);
+  useInvalidating(({ lineId, patch }) => InvoiceRepository.remapLine(lineId, patch), INVOICE_KEYS);
 
 // ---- order log -------------------------------------------------------------
 export const useAddOrderLine = () => useInvalidating((row) => InvoiceDetailRepository.add(row), ["orderLog"]);
