@@ -7,7 +7,9 @@ import { Loading, ErrorBox, Pill } from "./ui/parts.jsx";
 const money = (v) => (v == null ? "" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const num = (v) => (v == null || v === "" ? "" : Number(v).toLocaleString());
 
-export default function InvoiceView({ open, onClose, invoiceId }) {
+// `highlightItemId` marks the line you arrived from, so opening an invoice from
+// item analysis doesn't leave you hunting for the row you were looking at.
+export default function InvoiceView({ open, onClose, invoiceId, highlightItemId = null }) {
   const { data, isLoading, error } = useInvoice(invoiceId);
 
   return (
@@ -45,17 +47,19 @@ export default function InvoiceView({ open, onClose, invoiceId }) {
                   <th className="px-3 py-2 font-semibold">Item / line</th>
                   <th className="px-3 py-2 font-semibold text-right">Qty</th>
                   <th className="px-3 py-2 font-semibold text-right">Net/unit</th>
+                  <th className="px-3 py-2 font-semibold text-right">Net</th>
                   <th className="px-3 py-2 font-semibold text-right">VAT%</th>
                   <th className="px-3 py-2 font-semibold text-right">Gross</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(data.lines || []).map((l) => (
-                  <tr key={l.id}>
+                  <tr key={l.id} className={highlightItemId && l.item_id === highlightItemId ? "bg-teal-50" : ""}>
                     <td className="px-3 py-2 text-slate-400">{l.line_no}</td>
                     <td className="px-3 py-2">{l.item?.name || l.ksef_item_name_raw}</td>
                     <td className="px-3 py-2 text-right">{num(l.quantity)} {l.unit}</td>
                     <td className="px-3 py-2 text-right">{money(l.net_unit)}</td>
+                    <td className="px-3 py-2 text-right">{money(l.net_total)}</td>
                     <td className="px-3 py-2 text-right">{l.vat_rate ?? ""}</td>
                     <td className="px-3 py-2 text-right font-medium">{money(l.gross_total)}</td>
                   </tr>

@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { Card, Empty } from "../ui/parts.jsx";
 import ItemPicker from "../ui/ItemPicker.jsx";
+import InvoiceView from "../InvoiceView.jsx";
 import ItemTrendTable from "./ItemTrendTable.jsx";
 import { ChartCard, Kpi, BarList, money0, money2, moneyUnit, qty, monthLabel } from "./common.jsx";
 
@@ -22,6 +23,9 @@ const dayLabel = (d) => (d || "").slice(5); // MM-DD — the year is on the rang
 
 export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptions }) {
   const [itemId, setItemId] = useState(null);
+  // Which invoice to show in full — "why was this line priced like that?"
+  // usually needs the rest of the invoice for context.
+  const [viewInvoiceId, setViewInvoiceId] = useState(null);
   const detailRef = useRef(null);
 
   // Picking a row in the table above should carry you down to the detail —
@@ -303,7 +307,16 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                   {model.rows.map((r) => (
                     <tr key={r.id} className="border-t border-slate-100">
                       <td className="whitespace-nowrap py-1.5 pr-3 text-slate-500">{r.date}</td>
-                      <td className="whitespace-nowrap py-1.5 pr-3 text-slate-600">{r.invoiceNumber}</td>
+                      <td className="whitespace-nowrap py-1.5 pr-3">
+                        <button
+                          type="button"
+                          onClick={() => setViewInvoiceId(r.invoiceId)}
+                          className="text-teal-700 underline decoration-teal-300 underline-offset-2 hover:decoration-teal-600"
+                          title="Show every line on this invoice"
+                        >
+                          {r.invoiceNumber || "(no number)"}
+                        </button>
+                      </td>
                       <td className="py-1.5 pr-3 text-slate-600">{r.supplierName}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{qty(r.quantity)} {r.unit}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums text-slate-400">{qty(r.packSize)}</td>
@@ -325,6 +338,13 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
           </ChartCard>
         </>
       )}
+
+      <InvoiceView
+        open={!!viewInvoiceId}
+        onClose={() => setViewInvoiceId(null)}
+        invoiceId={viewInvoiceId}
+        highlightItemId={itemId}
+      />
     </div>
   );
 }
