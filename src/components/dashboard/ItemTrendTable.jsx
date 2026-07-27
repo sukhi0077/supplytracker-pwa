@@ -71,6 +71,9 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
   const [showAll, setShowAll] = useState(false);
   const [hidePortal, setHidePortal] = useState(false);
   const [sort, setSort] = useState("change");
+  // Which series is drawn at full strength; the other two sit behind it faintly
+  // for context, since they share the row box but not the scale.
+  const [metric, setMetric] = useState("price");
 
   const { rows, span } = useMemo(() => {
     // One bucket per (item, purchase date) — every order becomes a point.
@@ -200,17 +203,30 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
           <span className="text-xs text-slate-400">({portalCount})</span>
         </label>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+        {/* Metric switcher — doubles as the legend, since the highlighted
+            series is the one whose colour is readable. */}
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-300">
           {SERIES.map((s) => (
-            <span key={s.key} className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: s.color }} />
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setMetric(s.key)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold transition ${
+                metric === s.key ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-sm"
+                style={{ background: s.color, opacity: metric === s.key ? 1 : 0.45 }}
+              />
               {s.label}
-            </span>
+            </button>
           ))}
-          <span className="text-slate-400">
-            {span ? `${dayLabel(span.from)} – ${dayLabel(span.to)} · one point per order` : "one point per order"}
-          </span>
         </div>
+
+        <span className="text-xs text-slate-400">
+          {span ? `${dayLabel(span.from)} – ${dayLabel(span.to)} · one point per order` : "one point per order"}
+        </span>
       </div>
 
       <div className="overflow-x-auto">
@@ -219,8 +235,8 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
             <tr>
               <th className="w-52 py-2 pr-3 font-semibold">Item</th>
               <th className="py-2 pr-3 font-semibold">Quantity · gross · unit price</th>
-              <th className="w-24 py-2 pr-3 text-right font-semibold">Qty</th>
-              <th className="w-24 py-2 pr-3 text-right font-semibold">
+              <th className={`w-24 py-2 pr-3 text-right font-semibold ${metric === "qty" ? "text-slate-700" : ""}`}>Qty</th>
+              <th className={`w-24 py-2 pr-3 text-right font-semibold ${metric === "gross" ? "text-slate-700" : ""}`}>
                 <button
                   type="button"
                   onClick={() => setSort("spend")}
@@ -229,7 +245,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
                   Gross
                 </button>
               </th>
-              <th className="w-32 py-2 text-right font-semibold">
+              <th className={`w-32 py-2 text-right font-semibold ${metric === "price" ? "text-slate-700" : ""}`}>
                 <button
                   type="button"
                   onClick={() => setSort("change")}
@@ -262,42 +278,46 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
                     height={H}
                     preserveAspectRatio="none"
                     role="img"
-                    aria-label={`${r.name}: quantity, gross and unit price trend`}
+                    aria-label={`${r.name}: ${SERIES.find((s) => s.key === metric)?.label} trend, other metrics faded`}
                   >
                     <title>
-                      {`${r.name} — ${r.points} purchase${r.points === 1 ? "" : "s"}, last ${r.lastDate}: ${moneyUnit(r.lastPrice)}/${r.unit || "unit"}`}
+                      {`${r.name} — ${r.points} purchase${r.points === 1 ? "" : "s"}, last ${r.lastDate}: ` +
+                        `${fmtQty(r.base)} ${r.unit}, ${money0(r.gross)}, ${moneyUnit(r.lastPrice)}/${r.unit || "unit"}`}
                     </title>
-                    {SERIES.map((s) => {
+                    {/* Ghosts first so the selected series paints on top. */}
+                    {[...SERIES]
+                      .sort((a, b) => (a.key === metric ? 1 : 0) - (b.key === metric ? 1 : 0))
+                      .map((s) => {
                       const pts = scale(
                         s.key === "qty" ? r.qtyP : s.key === "gross" ? r.grossP : r.priceP,
                       );
                       if (!pts.length) return null;
-                      const isPrice = s.key === "price";
+                      const on = s.key === metric;
                       return (
                         <g key={s.key}>
                           <path
                             d={toPath(pts)}
                             fill="none"
                             stroke={s.color}
-                            strokeWidth={isPrice ? 2 : 1.4}
+                            strokeWidth={on ? 2 : 1}
                             strokeLinejoin="round"
                             strokeLinecap="round"
                             vectorEffect="non-scaling-stroke"
-                            opacity={isPrice ? 1 : 0.75}
+                            opacity={on ? 1 : 0.2}
                           />
-                          {/* Mark every purchase, so a single order still shows
-                              as a dot instead of an empty cell. */}
-                          {pts.map((p, i) => (
-                            <circle
-                              key={i}
-                              cx={p.x}
-                              cy={p.y}
-                              r={i === pts.length - 1 ? 2.4 : 1.6}
-                              fill={s.color}
-                              opacity={isPrice ? 1 : 0.75}
-                              vectorEffect="non-scaling-stroke"
-                            />
-                          ))}
+                          {/* Only the selected series gets dots — ghost dots
+                              read as data points and clutter the row. */}
+                          {on &&
+                            pts.map((p, i) => (
+                              <circle
+                                key={i}
+                                cx={p.x}
+                                cy={p.y}
+                                r={i === pts.length - 1 ? 2.6 : 1.7}
+                                fill={s.color}
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            ))}
                         </g>
                       );
                     })}
