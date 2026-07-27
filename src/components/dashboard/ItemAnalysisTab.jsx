@@ -170,9 +170,23 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
     // Packs seen — a changing pack size is the usual explanation for a price step.
     const packs = [...new Set(rows.map((r) => r.packSize))].sort((a, b) => a - b);
 
+    // Y domain with a floor on the visible range. Recharts' "auto" domain zooms
+    // to the data, so four prices varying by 0.2% fill the chart and read as a
+    // dramatic swing. Showing at least ±5% around the midpoint keeps a flat
+    // price looking flat.
+    const plotted = series.map((s) => s.perBase).filter((v) => v != null);
+    let priceDomain = ["auto", "auto"];
+    if (plotted.length) {
+      const lo = Math.min(...plotted);
+      const hi = Math.max(...plotted);
+      const mid = (lo + hi) / 2;
+      const half = Math.max((hi - lo) / 2, Math.abs(mid) * 0.05);
+      priceDomain = [Math.max(0, +(mid - half * 1.15).toFixed(2)), +(mid + half * 1.15).toFixed(2)];
+    }
+
     return {
       rows: [...rows].reverse(), // table shows newest first
-      spend, grossSpend, baseQty, orders, cadence, series, monthly, suppliers, packs,
+      spend, grossSpend, baseQty, orders, cadence, series, monthly, suppliers, packs, priceDomain,
       first, last, avg,
       min: prices.length ? Math.min(...prices) : null,
       max: prices.length ? Math.max(...prices) : null,
@@ -274,7 +288,7 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                 <YAxis
                   tick={{ fontSize: 11 }}
                   width={58}
-                  domain={["auto", "auto"]}
+                  domain={model.priceDomain}
                   tickFormatter={(v) => Number(v).toFixed(2)}
                 />
                 <Tooltip

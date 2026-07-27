@@ -27,6 +27,14 @@ const SERIES = [
   { key: "price", label: "Price / unit", color: "#1baf7a" },
 ];
 
+// Smallest movement that fills the row box, as a fraction of the value.
+// Without a floor, min/max normalisation makes ANY variation full-height: four
+// yoghurt orders at 4.44 / 4.43 / 4.43 / 4.44 — a 0.2% wiggle — drew a deep
+// bowl that looked like a real price dip. The visible range is now at least
+// ±5% around the midpoint, so noise stays visibly flat and only a genuine
+// move fills the box.
+const MIN_REL_SPAN = 0.1;
+
 // points: [{ fx, v }] with fx already 0..1 along the shared timeline.
 // A flat series sits on the centre line rather than collapsing to an edge.
 function scale(points, w = W, h = H) {
@@ -35,10 +43,12 @@ function scale(points, w = W, h = H) {
   const vals = real.map((p) => p.v);
   const min = Math.min(...vals);
   const max = Math.max(...vals);
-  const span = max - min;
+  const mid = (min + max) / 2;
+  const span = Math.max(max - min, Math.abs(mid) * MIN_REL_SPAN);
+  const lo = mid - span / 2;
   return real.map((p) => ({
     x: 1 + p.fx * (w - 2),
-    y: span === 0 ? h / 2 : h - PAD - ((p.v - min) / span) * (h - 2 * PAD),
+    y: span === 0 ? h / 2 : h - PAD - ((p.v - lo) / span) * (h - 2 * PAD),
   }));
 }
 
