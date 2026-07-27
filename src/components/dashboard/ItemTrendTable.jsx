@@ -7,12 +7,19 @@
 // floor. Each series is instead normalised to its own min/max within the row —
 // the SHAPE of each line is faithful, the vertical position is not comparable
 // between series. Actual values live in the columns and the hover tooltip.
+//
+// Points are ONE PER PURCHASE DATE, placed at their real position along the
+// period's timeline — not bucketed by month. Monthly buckets meant four orders
+// inside one month collapsed to a single point, and a one-point line draws
+// nothing at all. The x scale is shared by every row, so two rows remain
+// comparable in time even though they were bought on different days.
 import { useMemo, useState } from "react";
 import { money0, moneyUnit, qty as fmtQty } from "./common.jsx";
 
 const W = 320; // viewBox width; the svg itself stretches to the column
 const H = 40;
 const PAD = 4;
+const DAY = 86400000;
 
 const SERIES = [
   { key: "qty", label: "Quantity", color: "#2a78d6" },
@@ -20,44 +27,28 @@ const SERIES = [
   { key: "price", label: "Price / unit", color: "#1baf7a" },
 ];
 
-// Normalise one series into the row box. A flat series sits on the centre line
-// rather than collapsing to the top or bottom edge.
-function path(values, w = W, h = H) {
-  const real = values.filter((v) => v != null);
-  if (real.length < 1) return "";
-  const min = Math.min(...real);
-  const max = Math.max(...real);
+// points: [{ fx, v }] with fx already 0..1 along the shared timeline.
+// A flat series sits on the centre line rather than collapsing to an edge.
+function scale(points, w = W, h = H) {
+  const real = points.filter((p) => p.v != null);
+  if (!real.length) return [];
+  const vals = real.map((p) => p.v);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   const span = max - min;
-  const n = values.length;
-  const x = (i) => (n === 1 ? w / 2 : (i / (n - 1)) * (w - 2) + 1);
-  const y = (v) => (span === 0 ? h / 2 : h - PAD - ((v - min) / span) * (h - 2 * PAD));
-
-  let d = "";
-  let pen = false;
-  values.forEach((v, i) => {
-    if (v == null) { pen = false; return; }
-    d += `${pen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
-    pen = true;
-  });
-  return d.trim();
+  return real.map((p) => ({
+    x: 1 + p.fx * (w - 2),
+    y: span === 0 ? h / 2 : h - PAD - ((p.v - min) / span) * (h - 2 * PAD),
+  }));
 }
 
-function lastPoint(values, w = W, h = H) {
-  const idx = values.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).pop();
-  if (idx == null || idx < 0) return null;
-  const real = values.filter((v) => v != null);
-  const min = Math.min(...real), max = Math.max(...real), span = max - min;
-  const n = values.length;
-  return {
-    x: n === 1 ? w / 2 : (idx / (n - 1)) * (w - 2) + 1,
-    y: span === 0 ? h / 2 : h - PAD - ((values[idx] - min) / span) * (h - 2 * PAD),
-  };
+function toPath(pts) {
+  if (!pts.length) return "";
+  return pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
 
-const monthShort = (ym) => {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
-};
+const dayLabel = (d) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" });
 
 function Delta({ value, lowerIsBetter }) {
   if (value == null) return <span className="text-slate-300">—</span>;
@@ -75,55 +66,73 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
 
-  const { rows, months } = useMemo(() => {
-    // Bucket every mapped line by item and month.
-    const monthSet = new Set();
+  const { rows, span } = useMemo(() => {
+    // One bucket per (item, purchase date) — every order becomes a point.
     const byItem = new Map();
+    let minT = Infinity;
+    let maxT = -Infinity;
+
     for (const l of lines) {
       if (!l.itemId) continue;
       const date = invoiceById.get(l.invoiceId)?.issueDate || "";
-      const ym = date.slice(0, 7);
-      if (!ym) continue;
-      monthSet.add(ym);
-      if (!byItem.has(l.itemId)) byItem.set(l.itemId, { itemId: l.itemId, buckets: new Map(), orders: new Set(), net: 0, gross: 0, base: 0 });
+      if (!date) continue;
+      const t = Date.parse(date);
+      if (!Number.isFinite(t)) continue;
+      if (t < minT) minT = t;
+      if (t > maxT) maxT = t;
+
+      if (!byItem.has(l.itemId)) {
+        byItem.set(l.itemId, { itemId: l.itemId, days: new Map(), orders: new Set(), net: 0, gross: 0, base: 0 });
+      }
       const it = byItem.get(l.itemId);
       it.orders.add(l.invoiceId);
       it.net += l.net;
       it.gross += l.gross;
       it.base += l.baseQuantity || 0;
-      if (!it.buckets.has(ym)) it.buckets.set(ym, { qty: 0, gross: 0, net: 0, base: 0 });
-      const b = it.buckets.get(ym);
+
+      if (!it.days.has(date)) it.days.set(date, { date, t, qty: 0, gross: 0, net: 0, base: 0 });
+      const b = it.days.get(date);
       b.qty += l.baseQuantity || 0;
       b.gross += l.gross;
       b.net += l.net;
       b.base += l.baseQuantity || 0;
     }
 
-    const months = [...monthSet].sort();
+    const range = maxT > minT ? maxT - minT : 0;
+    // Everything on one day → a single centred point per series.
+    const fx = (t) => (range === 0 ? 0.5 : (t - minT) / range);
+
     const rows = [...byItem.values()].map((it) => {
       const info = itemMap.get(it.itemId);
-      // A month with no purchase is a gap, not a zero — zero would draw a
-      // spike down to the floor and misrepresent the trend.
-      const series = months.map((ym) => it.buckets.get(ym) || null);
-      const qtyS = series.map((b) => (b ? b.qty : null));
-      const grossS = series.map((b) => (b ? b.gross : null));
-      const priceS = series.map((b) => (b && b.base ? b.net / b.base : null));
-      const firstPrice = priceS.find((v) => v != null) ?? null;
-      const lastPrice = [...priceS].reverse().find((v) => v != null) ?? null;
+      const days = [...it.days.values()].sort((a, b) => a.t - b.t);
+      const at = (v) => days.map((d) => ({ fx: fx(d.t), v: v(d) }));
+
+      const priceOf = (d) => (d.base ? d.net / d.base : null);
+      const firstPrice = priceOf(days[0]);
+      const lastPrice = priceOf(days[days.length - 1]);
+
       return {
         ...it,
         name: info?.name || "(item)",
         unit: info?.unit || "",
         category: info?.category || "",
-        qtyS, grossS, priceS,
+        days,
+        qtyP: at((d) => d.qty),
+        grossP: at((d) => d.gross),
+        priceP: at(priceOf),
         lastPrice,
+        lastDate: days[days.length - 1]?.date || "",
         avgPrice: it.base ? it.net / it.base : null,
         change: firstPrice && lastPrice ? (lastPrice - firstPrice) / firstPrice : null,
         orders: it.orders.size,
+        points: days.length,
       };
     }).sort((a, b) => b.gross - a.gross);
 
-    return { rows, months };
+    return {
+      rows,
+      span: range === 0 ? null : { from: new Date(minT).toISOString().slice(0, 10), to: new Date(maxT).toISOString().slice(0, 10), days: Math.round(range / DAY) },
+    };
   }, [lines, invoiceById, itemMap]);
 
   const filtered = useMemo(() => {
@@ -159,7 +168,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
             </span>
           ))}
           <span className="text-slate-400">
-            {months.length ? `${monthShort(months[0])} – ${monthShort(months[months.length - 1])}` : ""}
+            {span ? `${dayLabel(span.from)} – ${dayLabel(span.to)} · one point per order` : "one point per order"}
           </span>
         </div>
       </div>
@@ -185,7 +194,9 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
                 <td className="py-2 pr-3 align-middle">
                   <div className="truncate font-medium text-slate-800" title={r.name}>{r.name}</div>
                   <div className="truncate text-[11px] text-slate-400">
-                    {r.orders} order{r.orders === 1 ? "" : "s"}{r.category ? ` · ${r.category}` : ""}
+                    {r.orders} order{r.orders === 1 ? "" : "s"}
+                    {r.points !== r.orders ? ` · ${r.points} day${r.points === 1 ? "" : "s"}` : ""}
+                    {r.category ? ` · ${r.category}` : ""}
                   </div>
                 </td>
                 <td className="py-2 pr-3 align-middle">
@@ -198,25 +209,39 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
                     aria-label={`${r.name}: quantity, gross and unit price trend`}
                   >
                     <title>
-                      {`${r.name} — latest: ${fmtQty(r.qtyS.filter(Boolean).pop())} ${r.unit}, ${money0(r.grossS.filter(Boolean).pop() || 0)}, ${moneyUnit(r.lastPrice)}/${r.unit || "unit"}`}
+                      {`${r.name} — ${r.points} purchase${r.points === 1 ? "" : "s"}, last ${r.lastDate}: ${moneyUnit(r.lastPrice)}/${r.unit || "unit"}`}
                     </title>
                     {SERIES.map((s) => {
-                      const values = s.key === "qty" ? r.qtyS : s.key === "gross" ? r.grossS : r.priceS;
-                      const d = path(values);
-                      const lp = lastPoint(values);
+                      const pts = scale(
+                        s.key === "qty" ? r.qtyP : s.key === "gross" ? r.grossP : r.priceP,
+                      );
+                      if (!pts.length) return null;
+                      const isPrice = s.key === "price";
                       return (
                         <g key={s.key}>
                           <path
-                            d={d}
+                            d={toPath(pts)}
                             fill="none"
                             stroke={s.color}
-                            strokeWidth={s.key === "price" ? 2 : 1.4}
+                            strokeWidth={isPrice ? 2 : 1.4}
                             strokeLinejoin="round"
                             strokeLinecap="round"
                             vectorEffect="non-scaling-stroke"
-                            opacity={s.key === "price" ? 1 : 0.75}
+                            opacity={isPrice ? 1 : 0.75}
                           />
-                          {lp && <circle cx={lp.x} cy={lp.y} r="2.4" fill={s.color} vectorEffect="non-scaling-stroke" />}
+                          {/* Mark every purchase, so a single order still shows
+                              as a dot instead of an empty cell. */}
+                          {pts.map((p, i) => (
+                            <circle
+                              key={i}
+                              cx={p.x}
+                              cy={p.y}
+                              r={i === pts.length - 1 ? 2.4 : 1.6}
+                              fill={s.color}
+                              opacity={isPrice ? 1 : 0.75}
+                              vectorEffect="non-scaling-stroke"
+                            />
+                          ))}
                         </g>
                       );
                     })}
@@ -239,7 +264,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
       <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
         <span>
           {shown.length} of {rows.length} items
-          {months.length < 2 && " · only one month in range — lines need at least two points"}
+          {span == null && " · all purchases fall on one day"}
         </span>
         {!q.trim() && rows.length > 20 && (
           <button onClick={() => setShowAll((v) => !v)} className="font-semibold text-teal-600 hover:underline">
