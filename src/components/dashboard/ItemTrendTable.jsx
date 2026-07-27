@@ -54,6 +54,22 @@ const dayLabel = (d) =>
 const PORTAL = /online[\s_-]*portal/i;
 const isPortal = (r) => PORTAL.test(r.subCategory || "");
 
+function Chip({ on, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition ${
+        on
+          ? "border-teal-600 bg-teal-600 text-white"
+          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Delta({ value, lowerIsBetter }) {
   if (value == null) return <span className="text-slate-300">—</span>;
   const flat = Math.abs(value) < 0.01;
@@ -74,6 +90,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
   // Which series is drawn at full strength; the other two sit behind it faintly
   // for context, since they share the row box but not the scale.
   const [metric, setMetric] = useState("price");
+  const [cat, setCat] = useState(null); // null = all categories
 
   const { rows, span } = useMemo(() => {
     // One bucket per (item, purchase date) — every order becomes a point.
@@ -150,9 +167,29 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
   // to the checkbox reads 0 and the mismatch is visible rather than silent.
   const portalCount = useMemo(() => rows.filter(isPortal).length, [rows]);
 
+  // Category chips, ordered by spend so the ones you actually buy come first.
+  // Counted after the portal exclusion so the numbers match what you'd see.
+  const categories = useMemo(() => {
+    const base = hidePortal ? rows.filter((r) => !isPortal(r)) : rows;
+    const m = new Map();
+    for (const r of base) {
+      const name = r.category || "Uncategorised";
+      if (!m.has(name)) m.set(name, { name, count: 0, gross: 0 });
+      const c = m.get(name);
+      c.count += 1;
+      c.gross += r.gross;
+    }
+    return [...m.values()].sort((a, b) => b.gross - a.gross);
+  }, [rows, hidePortal]);
+
+  // If the selected category vanishes (excluding the portal emptied it, or the
+  // date range moved), fall back to All rather than showing an empty table.
+  const activeCat = categories.some((c) => c.name === cat) ? cat : null;
+
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
     let out = hidePortal ? rows.filter((r) => !isPortal(r)) : rows;
+    if (activeCat) out = out.filter((r) => (r.category || "Uncategorised") === activeCat);
     if (n) {
       out = out.filter(
         (r) =>
@@ -171,7 +208,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
       if (bv == null) return -1;
       return bv - av;
     });
-  }, [rows, q, hidePortal, sort]);
+  }, [rows, q, hidePortal, sort, activeCat]);
 
   const shown = showAll || q.trim() ? filtered : filtered.slice(0, 20);
 
@@ -228,6 +265,21 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
           {span ? `${dayLabel(span.from)} – ${dayLabel(span.to)} · one point per order` : "one point per order"}
         </span>
       </div>
+
+      {/* Quick category filters — scroll sideways on a phone rather than
+          wrapping into a wall of chips. */}
+      {categories.length > 1 && (
+        <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <Chip on={!activeCat} onClick={() => setCat(null)}>
+            All <span className="opacity-60">{rows.length}</span>
+          </Chip>
+          {categories.map((c) => (
+            <Chip key={c.name} on={activeCat === c.name} onClick={() => setCat(activeCat === c.name ? null : c.name)}>
+              {c.name} <span className="opacity-60">{c.count}</span>
+            </Chip>
+          ))}
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="min-w-[720px] w-full text-sm">
@@ -340,6 +392,7 @@ export default function ItemTrendTable({ lines, invoiceById, itemMap, onPickItem
       <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
         <span>
           {shown.length} of {filtered.length} items
+          {activeCat && ` in ${activeCat}`}
           {hidePortal && portalCount > 0 && ` · ${portalCount} online-portal item${portalCount === 1 ? "" : "s"} hidden`}
           {sort === "change" ? " · sorted by biggest price rise" : " · sorted by spend"}
           {span == null && " · all purchases fall on one day"}
