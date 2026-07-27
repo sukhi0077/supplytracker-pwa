@@ -27,7 +27,9 @@ export class InvoiceRepository {
       await withTimeout(
         supabase
           .from("invoices")
-          .select("*, supplier:suppliers(name)")
+          // ksef_name is the legal name as it appears on the KSeF invoice — it
+          // often differs from the curated supplier name we display.
+          .select("*, supplier:suppliers(name, nip, ksef_name)")
           .eq("id", id)
           .single(),
         15000,
@@ -47,7 +49,13 @@ export class InvoiceRepository {
       ),
       "Loading invoice lines",
     );
-    return { ...inv, supplierName: inv.supplier?.name || "", lines: lines || [] };
+    return {
+      ...inv,
+      supplierName: inv.supplier?.name || "",
+      supplierKsefName: inv.supplier?.ksef_name || "",
+      supplierNip: inv.supplier?.nip || "",
+      lines: lines || [],
+    };
   }
 
   static async count() {

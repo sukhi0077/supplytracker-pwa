@@ -21,9 +21,17 @@ export default function InvoiceView({ open, onClose, invoiceId, highlightItemId 
       ) : (
         <div>
           <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <div>
+            <div className="col-span-2">
               <div className="text-xs text-slate-400">Supplier</div>
               <div className="font-medium">{data.supplierName}</div>
+              {/* The legal name on the KSeF invoice, when it isn't the same as
+                  the curated one — worth seeing to confirm the right match. */}
+              {data.supplierKsefName && data.supplierKsefName !== data.supplierName && (
+                <div className="text-xs text-slate-500" title="Legal name as it appears on the KSeF invoice">
+                  KSeF: {data.supplierKsefName}
+                </div>
+              )}
+              {data.supplierNip && <div className="text-[11px] text-slate-400">NIP {data.supplierNip}</div>}
             </div>
             <div>
               <div className="text-xs text-slate-400">Issued</div>
