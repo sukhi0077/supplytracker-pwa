@@ -18,9 +18,15 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 # --- KSeF environment (non-secret config) ---
+# These drive the CRON run, which passes no credentials of its own and so falls
+# back to KSEF_BASE_URL + the KSEF_NIP / KSEF_TOKEN secrets. The PWA's manual
+# fetch sends its own environment and overrides the base URL per request.
+#
+# KSEF_TOKEN must be a PRODUCTION token — a test-environment token will not
+# authenticate here.
 [vars]
-KSEF_BASE_URL = "https://api-test.ksef.mf.gov.pl/api/v2"   # prod: https://api.ksef.mf.gov.pl/api/v2
-KSEF_ENV = "test"
+KSEF_BASE_URL = "https://api.ksef.mf.gov.pl/api/v2"   # test: https://api-test.ksef.mf.gov.pl/api/v2
+KSEF_ENV = "prod"
 # Set true to also create a purchase_in stock movement per invoice line that maps
 # to a catalogue item (mirrors SupplyTracker's stock behaviour).
 KSEF_WRITE_STOCK = "false"
