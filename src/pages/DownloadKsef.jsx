@@ -19,11 +19,17 @@ const daysAgo = (n) => iso(new Date(Date.now() - n * 86400000));
 const WORKER_URL = import.meta.env.VITE_KSEF_WORKER_URL || "";
 const LS = "ksef.creds.v1";
 
+// Prod is the default; test is kept for debugging against the MF sandbox.
+// Anything else (a remembered "demo" from before it was dropped) falls back to
+// prod rather than sending requests to a host the Worker no longer knows.
+const ENVIRONMENTS = ["prod", "test"];
+const safeEnv = (v) => (ENVIRONMENTS.includes(v) ? v : "prod");
+
 export default function DownloadKsef({ isAdmin }) {
   const jobs = useKsefJobs();
   const qc = useQueryClient();
 
-  const [environment, setEnvironment] = useState("test");
+  const [environment, setEnvironment] = useState("prod");
   const [nip, setNip] = useState("");
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(false);
@@ -45,7 +51,7 @@ export default function DownloadKsef({ isAdmin }) {
       if (saved) {
         setNip(saved.nip || "");
         setToken(saved.token || "");
-        setEnvironment(saved.environment || "test");
+        setEnvironment(safeEnv(saved.environment));
         setRemember(true);
       }
     } catch {
@@ -132,12 +138,14 @@ export default function DownloadKsef({ isAdmin }) {
             <Field label="Environment">
               <select
                 value={environment}
-                onChange={(e) => setEnvironment(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                onChange={(e) => setEnvironment(safeEnv(e.target.value))}
+                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 ${
+                  environment === "test" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-300"
+                }`}
               >
-                <option value="test">test</option>
-                <option value="demo">demo</option>
-                <option value="prod">prod</option>
+                {ENVIRONMENTS.map((e) => (
+                  <option key={e} value={e}>{e}</option>
+                ))}
               </select>
             </Field>
             <Field label="NIP">

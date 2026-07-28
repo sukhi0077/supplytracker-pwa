@@ -18,7 +18,6 @@ type FullEnv = Env & { TRIGGER_SECRET?: string };
 // Map the UI's environment choice to a KSeF host; fall back to the configured one.
 const KSEF_HOSTS: Record<string, string> = {
   test: "https://api-test.ksef.mf.gov.pl/api/v2",
-  demo: "https://api-demo.ksef.mf.gov.pl/api/v2",
   prod: "https://api.ksef.mf.gov.pl/api/v2",
 };
 const baseUrlFor = (env: Env, environment?: string) =>
