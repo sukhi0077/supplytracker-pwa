@@ -23,24 +23,33 @@ import { COLORS, Kpi, ChartCard, BarList, money0, money2, monthLabel } from "../
 import CategoriesTab from "../components/dashboard/CategoriesTab.jsx";
 import ItemAnalysisTab from "../components/dashboard/ItemAnalysisTab.jsx";
 
-const iso = (d) => d.toISOString().slice(0, 10);
+// Local calendar date, NOT toISOString().slice(0,10). toISOString converts to
+// UTC first, so in Poland (UTC+1/+2) the 1st of the month at 00:00 local came
+// back as the last day of the PREVIOUS month — which would have quietly broken
+// the month presets below, and already made "today" wrong before ~01:00/02:00.
+const iso = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function rangeFor(preset) {
   const now = new Date();
   const to = iso(now);
-  if (preset === "all") return { from: undefined, to: undefined };
-  if (preset === "ytd") return { from: `${now.getFullYear()}-01-01`, to };
-  const n = { "3m": 3, "6m": 6, "12m": 12 }[preset] ?? 12;
-  const d = new Date(now.getFullYear(), now.getMonth() - n, now.getDate());
-  return { from: iso(d), to };
+  const y = now.getFullYear();
+  const m = now.getMonth();
+
+  if (preset === "month") return { from: iso(new Date(y, m, 1)), to };
+  // Whole previous month: the 1st through day 0 of this month = its last day.
+  if (preset === "prev") return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) };
+  if (preset === "ytd") return { from: `${y}-01-01`, to };
+  const n = { "3m": 3, "6m": 6 }[preset] ?? 3;
+  return { from: iso(new Date(y, m - n, now.getDate())), to };
 }
 
 const PRESETS = [
+  { key: "month", label: "This month" },
+  { key: "prev", label: "Last month" },
   { key: "3m", label: "3M" },
   { key: "6m", label: "6M" },
-  { key: "12m", label: "12M" },
   { key: "ytd", label: "YTD" },
-  { key: "all", label: "All" },
   { key: "custom", label: "Custom" },
 ];
 
@@ -51,11 +60,11 @@ const TABS = [
 ];
 
 export default function Dashboard() {
-  const [preset, setPreset] = useState("12m");
+  const [preset, setPreset] = useState("month");
   const [tab, setTab] = useState("overview");
   // Custom range seeds from the last 12 months so the inputs open on something
   // sensible rather than empty.
-  const [customFrom, setCustomFrom] = useState(() => rangeFor("12m").from);
+  const [customFrom, setCustomFrom] = useState(() => rangeFor("3m").from);
   const [customTo, setCustomTo] = useState(() => iso(new Date()));
 
   const { from, to } = useMemo(() => {
@@ -154,7 +163,6 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Purchasing analytics from your KSeF invoices."
         right={
           <div className="flex gap-1">
             {PRESETS.map((p) => (
