@@ -135,7 +135,15 @@ export class KsefClient {
   }
 
   async openSession(): Promise<KsefSession> {
-    if (!this.cfg.nip || !this.cfg.token) throw new Error("KSeF NIP + token required");
+    // Name what's actually missing. The cron supplies these from the KSEF_NIP /
+    // KSEF_TOKEN Worker secrets (the PWA sends them in the request body), so a
+    // bare "NIP + token required" gives no hint that a secret is unset.
+    if (!this.cfg.nip || !this.cfg.token) {
+      const missing = [!this.cfg.nip && "NIP", !this.cfg.token && "token"].filter(Boolean).join(" and ");
+      throw new Error(
+        `KSeF ${missing} missing. For the cron these come from the KSEF_NIP / KSEF_TOKEN Worker secrets — set them with \`wrangler secret put\`.`,
+      );
+    }
 
     // 1. challenge. contextIdentifier per KSeF 2.0: { type: "Nip", value: <nip> }.
     const ctx = { contextIdentifier: { type: "Nip", value: this.cfg.nip } };
