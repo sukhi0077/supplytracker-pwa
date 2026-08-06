@@ -4,7 +4,7 @@
 // actual KSeF calls run in the Cloudflare Worker (authenticated by your signed-in
 // admin session); the NIP + token are sent to it per run. Fetch history comes
 // from ksef_fetch_jobs.
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { startKsefFetch, cancelKsefFetch, subscribeKsefFetch } from "../lib/ksefFetchRunner.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useKsefJobs } from "../hooks/useCatalogue.js";
@@ -24,6 +24,27 @@ const LS = "ksef.creds.v1";
 // prod rather than sending requests to a host the Worker no longer knows.
 const ENVIRONMENTS = ["prod", "test"];
 const safeEnv = (v) => (ENVIRONMENTS.includes(v) ? v : "prod");
+
+// Why a run failed. The reason was always written to ksef_fetch_jobs.error_log
+// but never shown, so a failing cron looked like a silent one.
+function JobProblem({ job }) {
+  const failed = job.status === "failed" || job.error_count > 0;
+  if (!job.error_log && !job.notes) return null;
+  return (
+    <div
+      className={`mt-2 rounded-lg border px-2.5 py-2 text-xs ${
+        failed ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-600"
+      }`}
+    >
+      {job.notes && <div className="mb-1 font-semibold">{job.notes}</div>}
+      {job.error_log && (
+        <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+          {job.error_log}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 export default function DownloadKsef({ isAdmin }) {
   const jobs = useKsefJobs();
@@ -259,6 +280,7 @@ export default function DownloadKsef({ isAdmin }) {
                   <span className="text-slate-600">Upd {j.invoices_updated}</span>
                   {j.error_count > 0 && <span className="text-red-600">Err {j.error_count}</span>}
                 </div>
+                <JobProblem job={j} />
               </div>
             ))}
           </div>
@@ -279,16 +301,23 @@ export default function DownloadKsef({ isAdmin }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(jobs.data || []).map((j) => (
-                  <tr key={j.id}>
-                    <td className="px-4 py-2.5 text-slate-600">{(j.started_at || "").replace("T", " ").slice(0, 16)}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{j.environment}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{j.date_from} → {j.date_to}</td>
-                    <td className="px-4 py-2.5"><Pill value={j.status} /></td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{j.invoices_found}</td>
-                    <td className="px-4 py-2.5 text-right text-emerald-700">{j.invoices_created}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{j.invoices_updated}</td>
-                    <td className="px-4 py-2.5 text-right text-red-600">{j.error_count}</td>
-                  </tr>
+                  <Fragment key={j.id}>
+                    <tr>
+                      <td className="px-4 py-2.5 text-slate-600">{(j.started_at || "").replace("T", " ").slice(0, 16)}</td>
+                      <td className="px-4 py-2.5 text-slate-500">{j.environment}</td>
+                      <td className="px-4 py-2.5 text-slate-500">{j.date_from} → {j.date_to}</td>
+                      <td className="px-4 py-2.5"><Pill value={j.status} /></td>
+                      <td className="px-4 py-2.5 text-right text-slate-600">{j.invoices_found}</td>
+                      <td className="px-4 py-2.5 text-right text-emerald-700">{j.invoices_created}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-600">{j.invoices_updated}</td>
+                      <td className="px-4 py-2.5 text-right text-red-600">{j.error_count}</td>
+                    </tr>
+                    {(j.error_log || j.notes) && (
+                      <tr>
+                        <td colSpan={8} className="px-4 pb-3 pt-0"><JobProblem job={j} /></td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

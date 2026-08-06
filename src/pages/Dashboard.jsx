@@ -161,24 +161,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        right={
-          <div className="flex gap-1">
-            {PRESETS.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => setPreset(p.key)}
-                className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${
-                  preset === p.key ? "border-teal-600 bg-teal-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        }
-      />
+      <PageHeader title="Dashboard" />
 
       {preset === "custom" && (
         <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
@@ -206,19 +189,39 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Tabs — scrollable rather than wrapping on a narrow phone. */}
-      <div className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1 pb-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${
-              tab === t.key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Tabs and date presets share a row that wraps; each group scrolls
+          sideways on its own rather than pushing the page wider. Six presets
+          with word labels no longer fit beside the title. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                tab === t.key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs font-semibold ${
+                preset === p.key
+                  ? "border-teal-600 bg-teal-600 text-white"
+                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? (

@@ -336,7 +336,19 @@ export async function runKsefFetch(
     await finish(res.errors.length ? "partial" : "success", note);
   } catch (e) {
     res.errors.push((e as Error).message);
-    await finish("failed");
+    // Record which host and identity the run used. A cron that's still pointed
+    // at the sandbox, or running with no NIP/token secret, is otherwise
+    // indistinguishable from a KSeF outage in the job history.
+    const host = String(opts.baseUrl || env.KSEF_BASE_URL || "(no base url)")
+      .replace(/^https?:\/\//, "")
+      .split("/")[0];
+    const nip = opts.creds?.nip || env.KSEF_NIP;
+    await finish(
+      "failed",
+      `Failed against ${host} (env ${opts.environment || env.KSEF_ENV || "?"}), NIP ${nip ? "set" : "MISSING"}, token ${
+        opts.creds?.token || env.KSEF_TOKEN ? "set" : "MISSING"
+      }.`,
+    );
   }
 
   return res;

@@ -35,11 +35,22 @@ export default {
   // --- Cron ---
   async scheduled(event: ScheduledController, env: FullEnv, ctx: ExecutionContext) {
     const client = db(env);
+    // Log rather than swallow: a throw before the job row exists (bad Supabase
+    // creds, for instance) would otherwise leave no trace anywhere — not in
+    // ksef_fetch_jobs, not in the console. Visible via `wrangler tail`.
+    const run = (label: string, p: Promise<unknown>) =>
+      ctx.waitUntil(
+        p.then(
+          () => {},
+          (e) => console.error(`[cron ${label}] ${(e as Error)?.stack || e}`),
+        ),
+      );
+
     if (event.cron === "40 6 * * *") {
-      ctx.waitUntil(runWfirmaSync(env, client, { dateFrom: daysAgo(40), dateTo: iso(new Date()) }).then(() => {}));
+      run("wfirma", runWfirmaSync(env, client, { dateFrom: daysAgo(40), dateTo: iso(new Date()) }));
     } else {
       // default / "20 6 * * *": KSeF fetch, last 4 days.
-      ctx.waitUntil(runKsefFetch(env, client, daysAgo(4), iso(new Date())).then(() => {}));
+      run("ksef", runKsefFetch(env, client, daysAgo(4), iso(new Date())));
     }
   },
 

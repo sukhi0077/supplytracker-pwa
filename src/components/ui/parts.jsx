@@ -2,14 +2,17 @@
 // Small shared building blocks so pages stay compact and consistent.
 import Spinner from "./Spinner.jsx";
 
+// The row wraps: with a wide `right` slot (a long row of buttons) a rigid
+// flex row pushed its contents off the side of the page instead of moving
+// them onto a second line.
 export function PageHeader({ title, subtitle, right }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-4">
-      <div>
+    <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      {right}
+      {right && <div className="min-w-0 max-w-full">{right}</div>}
     </div>
   );
 }
