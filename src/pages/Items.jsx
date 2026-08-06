@@ -15,6 +15,39 @@ import { Loading, ErrorBox } from "../components/ui/parts.jsx";
 
 const EMPTY = { name: "", code: "", subCategoryId: "", unitId: "", defaultVatRate: "23", isActive: true, matchKeywords: "" };
 
+// New items are always ITM-series. The field used to say "auto if blank" but
+// nothing ever generated a code — blank stayed blank, and anything typed was
+// accepted.
+const CODE_RE = /^ITM[-_ ]?(\d+)$/i;
+
+// Next free code, matching the separator and digit width already in use so a
+// catalogue of ITM-0007 doesn't suddenly gain an ITM0008.
+export function nextItemCode(items) {
+  const taken = new Set();
+  let max = 0;
+  let sep = "";
+  let width = 4;
+  for (const it of items || []) {
+    const code = String(it.code || "").trim();
+    if (code) taken.add(code.toUpperCase());
+    const m = CODE_RE.exec(code);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (n > max) {
+      max = n;
+      sep = code.slice(3, code.length - m[1].length);
+      width = m[1].length;
+    }
+  }
+  let n = max + 1;
+  let code;
+  do {
+    code = `ITM${sep}${String(n).padStart(width, "0")}`;
+    n += 1;
+  } while (taken.has(code.toUpperCase()));
+  return code;
+}
+
 const inp = "w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400";
 const filterInp = "w-full rounded border border-slate-300 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400";
 const accentBtn = "rounded-md bg-teal-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50";
@@ -140,7 +173,12 @@ export default function Items({ isAdmin, allowDelete = false }) {
 
   const { sorted, sort } = useSort(filtered, { key: "name" });
 
-  const openAdd = () => { setEditId(null); setForm(EMPTY); setErr(""); setAdding(true); };
+  const openAdd = () => {
+    setEditId(null);
+    setForm({ ...EMPTY, code: nextItemCode(rows) });
+    setErr("");
+    setAdding(true);
+  };
   const openEdit = (it) => {
     setAdding(false);
     setErr("");
@@ -161,12 +199,24 @@ export default function Items({ isAdmin, allowDelete = false }) {
     if (!form.name.trim()) return setErr("Enter an item name.");
     if (!form.subCategoryId) return setErr("Choose a sub-category.");
     if (!form.unitId) return setErr("Choose a unit.");
+
+    // New items must be ITM-series. Existing items keep whatever code they
+    // already have — legacy codes shouldn't become unsaveable on an edit.
+    let code = form.code.trim().toUpperCase();
+    if (editId == null) {
+      if (!code) code = nextItemCode(rows);
+      if (!/^ITM/.test(code)) return setErr(`Item codes must be ITM-series — e.g. ${nextItemCode(rows)}.`);
+      if (rows.some((r) => String(r.code || "").trim().toUpperCase() === code)) {
+        return setErr(`Code ${code} is already used by another item.`);
+      }
+    }
+
     const sub = subs.find((s) => String(s.id) === String(form.subCategoryId));
     // Normalised write: FK ids only. category_id is derived from the chosen
     // sub-category so the two stay consistent.
     const patch = {
       name: form.name.trim(),
-      code: form.code.trim(),
+      code,
       categoryId: sub ? sub.category_id : null,
       subCategoryId: form.subCategoryId,
       unitId: form.unitId,
@@ -206,8 +256,13 @@ export default function Items({ isAdmin, allowDelete = false }) {
       <Field label="Item name *">
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inp} />
       </Field>
-      <Field label="Code (auto if blank)">
-        <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="ITM-…" className={inp} />
+      <Field label={mode === "add" ? "Code (ITM series)" : "Code"}>
+        <input
+          value={form.code}
+          onChange={(e) => setForm({ ...form, code: e.target.value })}
+          placeholder={mode === "add" ? nextItemCode(rows) : "ITM0001"}
+          className={`${inp} font-mono`}
+        />
       </Field>
       <Field label="Sub-category *">
         <select value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} className={inp}>
