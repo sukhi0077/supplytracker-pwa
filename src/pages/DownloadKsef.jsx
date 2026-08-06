@@ -112,6 +112,32 @@ export default function DownloadKsef({ isAdmin }) {
     }
   };
 
+  // Same call the nightly cron makes: no credentials in the body, so the Worker
+  // uses its KSEF_NIP / KSEF_TOKEN secrets and KSEF_BASE_URL. /auth-test only
+  // logs in — it imports nothing — so this is safe to press any time.
+  const testCron = async () => {
+    setError("");
+    setNote("");
+    if (!WORKER_URL) return setError("KSeF Worker URL is not configured (set VITE_KSEF_WORKER_URL).");
+    setBusy("/cron-test");
+    try {
+      const res = await KsefJobRepository.runFetch({
+        workerUrl: WORKER_URL,
+        path: "/auth-test",
+        useWorkerCreds: true,
+      });
+      setNote(
+        res.ok
+          ? "✓ The Worker's own secrets signed in to KSeF — the nightly cron is configured correctly."
+          : "The Worker's secrets did not return a token.",
+      );
+    } catch (e) {
+      setError(`Cron credentials: ${e.message || "request failed"}`);
+    } finally {
+      setBusy("");
+    }
+  };
+
   // Start the app-level fetch loop (keeps running if you leave this page).
   const runAll = () => {
     setError("");
@@ -216,9 +242,18 @@ export default function DownloadKsef({ isAdmin }) {
               <input type="checkbox" checked={remember} onChange={(e) => persist(e.target.checked)} />
               Remember credentials
             </label>
-            <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto">
+            {/* Wraps rather than a fixed 2-column grid — a third button used to
+                leave a half-width orphan on the second row. */}
+            <div className="flex w-full flex-wrap gap-2 [&>button]:flex-1 sm:ml-auto sm:w-auto sm:[&>button]:flex-none">
               <Btn onClick={() => call("/auth-test")} disabled={!!busy || fs.busy || !WORKER_URL}>
                 {busy === "/auth-test" ? "Checking…" : "Test login"}
+              </Btn>
+              <Btn
+                onClick={testCron}
+                disabled={!!busy || fs.busy || !WORKER_URL}
+                title="Signs in using the Worker's own KSEF_NIP / KSEF_TOKEN secrets — the same way the nightly job does"
+              >
+                {busy === "/cron-test" ? "Checking…" : "Test cron setup"}
               </Btn>
               <Btn
                 variant={fs.busy ? "danger" : "primary"}

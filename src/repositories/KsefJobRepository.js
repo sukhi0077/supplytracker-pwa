@@ -25,7 +25,21 @@ export class KsefJobRepository {
   // Call the Worker. Auth uses the signed-in admin's Supabase session; the KSeF
   // NIP + token + environment are sent in the body (the "enter NIP + key, fetch"
   // flow). `path` is /run/ksef by default, or /auth-test for the login check.
-  static async runFetch({ workerUrl, from, to, updateExisting, nip, token, environment, path = "/run/ksef" }) {
+  // `useWorkerCreds: true` sends no credentials, so the Worker falls back to
+  // its KSEF_NIP / KSEF_TOKEN secrets and KSEF_BASE_URL — i.e. exactly what the
+  // nightly cron does. That's how the cron setup can be tested from the app,
+  // with the admin's own session, instead of needing TRIGGER_SECRET and curl.
+  static async runFetch({
+    workerUrl,
+    from,
+    to,
+    updateExisting,
+    nip,
+    token,
+    environment,
+    useWorkerCreds = false,
+    path = "/run/ksef",
+  }) {
     const url = new URL(path, workerUrl);
     if (from) url.searchParams.set("from", from);
     if (to) url.searchParams.set("to", to);
@@ -40,7 +54,7 @@ export class KsefJobRepository {
     const resp = await fetch(url.toString(), {
       method: "POST",
       headers,
-      body: JSON.stringify({ nip, token, environment }),
+      body: JSON.stringify(useWorkerCreds ? {} : { nip, token, environment }),
     });
     const text = await resp.text();
     if (!resp.ok) throw new Error(`Worker ${resp.status}: ${text.slice(0, 300)}`);
