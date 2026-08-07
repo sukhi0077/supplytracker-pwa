@@ -113,16 +113,53 @@ async function resolveSupplier(
   return id;
 }
 
-async function loadMappings(db: SupabaseClient): Promise<Map<string, { itemId: string; pack: number }>> {
-  const { data } = await db.from("ksef_mappings").select("ksef_item_name,item_id,pack_size");
-  const map = new Map<string, { itemId: string; pack: number }>();
+interface Mapped {
+  itemId: string;
+  pack: number;
+}
+interface MappingIndex {
+  bySupplier: Map<string, Mapped>; // `${supplierId}::${normalisedName}`
+  global: Map<string, Mapped>; // normalisedName (supplier_id is null)
+  catchAll: Map<string, Mapped>; // supplierId -> applies to ANY line text
+}
+
+// A mapping whose text is "*" is a supplier catch-all: every line from that
+// supplier maps to the item regardless of wording. Meant for utilities and
+// services — an ENEA invoice describes the same electricity differently every
+// month, and there's no point mapping each variation.
+export const CATCH_ALL = "*";
+
+async function loadMappings(db: SupabaseClient): Promise<MappingIndex> {
+  // supplier_id was previously not selected at all, so supplier-scoped mappings
+  // were flattened into one global namespace: two suppliers using the same
+  // wording overwrote each other and the survivor was applied to both.
+  const { data } = await db.from("ksef_mappings").select("ksef_item_name,item_id,pack_size,supplier_id");
+  const idx: MappingIndex = { bySupplier: new Map(), global: new Map(), catchAll: new Map() };
   for (const m of data || []) {
-    map.set(normalizeKsefName(m.ksef_item_name as string), {
-      itemId: m.item_id as string,
-      pack: Number(m.pack_size ?? 1),
-    });
+    const name = String(m.ksef_item_name ?? "");
+    const sid = (m.supplier_id as string) || null;
+    const val: Mapped = { itemId: m.item_id as string, pack: Number(m.pack_size ?? 1) };
+    if (name.trim() === CATCH_ALL) {
+      if (sid) idx.catchAll.set(sid, val); // a global catch-all would swallow everything
+      continue;
+    }
+    const key = normalizeKsefName(name);
+    if (!key) continue;
+    if (sid) idx.bySupplier.set(`${sid}::${key}`, val);
+    else idx.global.set(key, val);
   }
-  return map;
+  return idx;
+}
+
+// Specific beats general: this supplier's text, then any supplier's text, then
+// this supplier's catch-all.
+function resolveMapping(idx: MappingIndex, supplierId: string, rawName: string): Mapped | undefined {
+  const key = normalizeKsefName(rawName || "");
+  return (
+    (key ? idx.bySupplier.get(`${supplierId}::${key}`) : undefined) ??
+    (key ? idx.global.get(key) : undefined) ??
+    idx.catchAll.get(supplierId)
+  );
 }
 
 export async function runKsefFetch(
@@ -278,7 +315,7 @@ export async function runKsefFetch(
             vatAmount: l.vat_amount,
             quantity: l.quantity,
           });
-          const mapped = mappings.get(normalizeKsefName(l.ksef_item_name_raw));
+          const mapped = resolveMapping(mappings, supplierId, l.ksef_item_name_raw);
           return {
             invoice_id: invoiceId,
             line_no: l.line_no,

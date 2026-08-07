@@ -9,7 +9,7 @@ import {
   useRemoveMapping,
   useApplyMappingToLines,
 } from "../hooks/useCatalogue.js";
-import { KsefMappingRepository } from "../repositories/KsefMappingRepository.js";
+import { KsefMappingRepository, CATCH_ALL, isCatchAll } from "../repositories/KsefMappingRepository.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import { SortTh } from "../components/SortTh.jsx";
 import { useSort } from "../hooks/useSort.js";
@@ -48,6 +48,9 @@ function Editor({ open, onClose, mapping }) {
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const catchAll = isCatchAll(form.ksefItemName);
+  const setCatchAll = (on) => setForm((f) => ({ ...f, ksefItemName: on ? CATCH_ALL : "" }));
+
   // Count affected lines as the name / supplier settle. Debounced so typing a
   // name doesn't fire a query per keystroke.
   useEffect(() => {
@@ -72,7 +75,10 @@ function Editor({ open, onClose, mapping }) {
 
   const save = async () => {
     setError("");
-    if (!form.ksefItemName.trim()) return setError("KSeF item text is required.");
+    if (catchAll && !form.supplierId) {
+      return setError("A catch-all needs a supplier — otherwise it would swallow every line from everyone.");
+    }
+    if (!catchAll && !form.ksefItemName.trim()) return setError("KSeF item text is required.");
     if (!form.itemId) return setError("Pick the catalogue item.");
     const pack = parseDecimal(form.packSize);
     if (pack == null || pack <= 0) return setError("Pack size must be a number greater than 0 (e.g. 0.2, 1, 10).");
@@ -110,13 +116,34 @@ function Editor({ open, onClose, mapping }) {
     >
       {error && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       <div className="space-y-3">
-        <Field label="KSeF item text" hint="Raw item name as it appears on the invoice.">
-          <Text value={form.ksefItemName} onChange={set("ksefItemName")} />
-        </Field>
+        <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={catchAll}
+            onChange={(e) => setCatchAll(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span className="min-w-0">
+            Every line from this supplier maps to this item
+            <span className="mt-0.5 block text-[11px] text-slate-400">
+              For utilities and services — an ENEA invoice words the same electricity differently every month. Text
+              mappings still win where they match.
+            </span>
+          </span>
+        </label>
+
+        {!catchAll && (
+          <Field label="KSeF item text" hint="Raw item name as it appears on the invoice.">
+            <Text value={form.ksefItemName} onChange={set("ksefItemName")} />
+          </Field>
+        )}
         <Field label="Catalogue item">
           <Select value={form.itemId} onChange={set("itemId")} options={(items || []).map((it) => ({ value: it.id, label: it.name }))} placeholder="Pick…" />
         </Field>
-        <Field label="Supplier" hint="Leave blank for a global mapping (any supplier).">
+        <Field
+          label={catchAll ? "Supplier *" : "Supplier"}
+          hint={catchAll ? "Required — the catch-all applies to this supplier only." : "Leave blank for a global mapping (any supplier)."}
+        >
           <Select value={form.supplierId} onChange={set("supplierId")} options={(suppliers || []).map((s) => ({ value: s.id, label: s.name }))} />
         </Field>
         <Field label="Pack size" hint="Base units per invoice unit — e.g. 10 for a 10 kg sack, or 0.2 for a 200 g tub.">
@@ -215,7 +242,15 @@ export default function KsefMappings({ isAdmin }) {
                 {sorted.map((m) => (
                   <tr key={m.id}>
                     <td className="px-4 py-2.5 font-medium text-slate-900">{m.itemName}</td>
-                    <td className="px-4 py-2.5 text-slate-700">{m.ksefItemName}</td>
+                    <td className="px-4 py-2.5 text-slate-700">
+                      {isCatchAll(m.ksefItemName) ? (
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                          any line from this supplier
+                        </span>
+                      ) : (
+                        m.ksefItemName
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-slate-500">{m.supplierName || <span className="text-slate-400">(any)</span>}</td>
                     <td className="px-4 py-2.5 text-slate-600">{m.packSize}</td>
                     {isAdmin && (

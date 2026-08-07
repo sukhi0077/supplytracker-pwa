@@ -18,6 +18,7 @@ import {
   useUnmappedLines,
 } from "../hooks/useCatalogue.js";
 import { InvoiceRepository } from "../repositories/InvoiceRepository.js";
+import { CATCH_ALL } from "../repositories/KsefMappingRepository.js";
 import UnmappedGroups from "../components/UnmappedGroups.jsx";
 import { buildSuggester, normalizeKsefName } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
@@ -65,9 +66,15 @@ export default function InvoiceDetails({ isAdmin }) {
     setRecheck(null);
     const bySupplier = new Map();
     const global = new Map();
+    const catchAll = new Map(); // supplierId -> mapping that ignores the text
     for (const m of mappings || []) {
+      if (!m.itemId) continue;
+      if (String(m.ksefItemName || "").trim() === CATCH_ALL) {
+        if (m.supplierId) catchAll.set(m.supplierId, m);
+        continue;
+      }
       const key = normalizeKsefName(m.ksefItemName || "");
-      if (!key || !m.itemId) continue;
+      if (!key) continue;
       if (m.supplierId) bySupplier.set(`${m.supplierId}::${key}`, m);
       else global.set(key, m);
     }
@@ -85,8 +92,12 @@ export default function InvoiceDetails({ isAdmin }) {
     for (const r of all) {
       unmapped += 1;
       const key = normalizeKsefName(r.ksefItemName || "");
-      if (!key) continue;
-      const hit = bySupplier.get(`${r.supplierId}::${key}`) || global.get(key);
+      // Specific beats general: this supplier's text, any supplier's text,
+      // then this supplier's catch-all.
+      const hit =
+        (key && bySupplier.get(`${r.supplierId}::${key}`)) ||
+        (key && global.get(key)) ||
+        catchAll.get(r.supplierId);
       if (!hit) continue;
       const pack = Number(hit.packSize ?? 1) || 1;
       const gk = `${hit.itemId}|${pack}`;

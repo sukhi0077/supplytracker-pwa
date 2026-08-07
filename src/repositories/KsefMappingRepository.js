@@ -14,10 +14,36 @@ import { supabase, withTimeout, unwrap } from "../supabase.js";
 // the match.
 const literal = (s) => String(s || "").trim().replace(/[%_]/g, (c) => `\\${c}`);
 
+// A mapping stored with this text is a supplier catch-all: it applies to every
+// line from that supplier whatever the wording. For utilities and services,
+// where the description changes every month but the item never does.
+export const CATCH_ALL = "*";
+export const isCatchAll = (name) => String(name || "").trim() === CATCH_ALL;
+
 export class KsefMappingRepository {
   // Invoice lines this mapping would apply to. Scoped to the supplier when the
   // mapping is supplier-specific, otherwise every supplier.
   static async findMatchingLines({ ksefItemName, supplierId = null }) {
+    // A catch-all matches by supplier, not by text — and only lines that are
+    // still unmapped, so it can't overwrite mappings that are already right.
+    if (isCatchAll(ksefItemName)) {
+      if (!supplierId) return [];
+      return (
+        unwrap(
+          await withTimeout(
+            supabase
+              .from("invoice_lines")
+              .select("id, invoice_id, item_id, invoice:invoices!inner(supplier_id)")
+              .is("item_id", null)
+              .eq("invoice.supplier_id", supplierId),
+            20000,
+            "Finding supplier lines",
+          ),
+          "Finding supplier lines",
+        ) || []
+      );
+    }
+
     const name = literal(ksefItemName);
     if (!name) return [];
     const lines = unwrap(
