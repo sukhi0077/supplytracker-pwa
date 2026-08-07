@@ -49,17 +49,16 @@ export default {
     if (event.cron === "40 6 * * *") {
       run("wfirma", runWfirmaSync(env, client, { dateFrom: daysAgo(40), dateTo: iso(new Date()) }));
     } else {
-      // default / "20 6 * * *": KSeF fetch, last 48 hours.
+      // default / "20 6 * * *": KSeF fetch, last 3 days.
       //
-      // The KSeF query is date-granular (it spans whole days), so a 48-hour
-      // window is "the day before yesterday through today". At 06:20 that
-      // guarantees a full 48 hours of coverage and overlaps the previous run
-      // by a day rather than risking a gap either side of midnight.
+      // The KSeF query is date-granular (it spans whole days), so this is
+      // "three days ago through today" — overlapping the previous run by two
+      // days rather than risking a gap either side of midnight.
       //
       // updateExisting picks up corrections to invoices already imported.
       // Candidates are ordered new-first, so a re-import can never starve a
       // genuinely new invoice of the per-run budget.
-      run("ksef", runKsefFetch(env, client, daysAgo(2), iso(new Date()), { updateExisting: true }));
+      run("ksef", runKsefFetch(env, client, daysAgo(3), iso(new Date()), { updateExisting: true }));
     }
   },
 
