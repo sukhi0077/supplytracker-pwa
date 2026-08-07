@@ -15,8 +15,10 @@ import {
   useAddMapping,
   useApplyLineMappings,
   useUnmappedCount,
+  useUnmappedLines,
 } from "../hooks/useCatalogue.js";
 import { InvoiceRepository } from "../repositories/InvoiceRepository.js";
+import UnmappedGroups from "../components/UnmappedGroups.jsx";
 import { buildSuggester, normalizeKsefName } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
@@ -30,6 +32,8 @@ const num = (v) => (v == null || v === "" ? "—" : Number(v).toLocaleString());
 
 export default function InvoiceDetails({ isAdmin }) {
   const [unmappedOnly, setUnmappedOnly] = useState(false);
+  // Grouping is the point of the unmapped view, so it's on by default there.
+  const [grouped, setGrouped] = useState(true);
   const [q, setQ] = useState("");
 
   const { data, isLoading, error } = useInvoiceLines({ unmappedOnly });
@@ -45,6 +49,8 @@ export default function InvoiceDetails({ isAdmin }) {
   const addMapping = useAddMapping();
   const applyMappings = useApplyLineMappings();
   const unmappedTotal = useUnmappedCount();
+  const showGroups = unmappedOnly && grouped;
+  const unmappedAll = useUnmappedLines(showGroups);
   const [recheck, setRecheck] = useState(null); // { done, matched } | { error }
 
   // Re-run the KSeF mapping table over lines that are still unmapped.
@@ -179,7 +185,12 @@ export default function InvoiceDetails({ isAdmin }) {
       return;
     }
     try {
-      await remap.mutateAsync({ lineId: row.id, patch: { itemId, packSize: pack } });
+      // A group carries every line sharing this text; one write covers them all.
+      if (row.ids) {
+        await applyMappings.mutateAsync([{ itemId, packSize: pack, ids: row.ids }]);
+      } else {
+        await remap.mutateAsync({ lineId: row.id, patch: { itemId, packSize: pack } });
+      }
       if (saveMapping && row.ksefItemName && itemId) {
         try {
           await addMapping.mutateAsync({
@@ -202,7 +213,7 @@ export default function InvoiceDetails({ isAdmin }) {
   const pendUnit = pendItem
     ? unitCodeById.get(pendItem.unitId) || unitCodeById.get(pendItem.defaultUomId) || pendItem.defaultUnit || ""
     : "";
-  const busy = remap.isPending || addMapping.isPending;
+  const busy = remap.isPending || addMapping.isPending || applyMappings.isPending;
 
   // The map control (chips + dropdown), reused by the desktop table and mobile cards.
   const renderMapControl = (r) => {
@@ -260,6 +271,13 @@ export default function InvoiceDetails({ isAdmin }) {
           Unmapped only {unmappedCount ? `(${unmappedCount})` : ""}
         </label>
 
+        {unmappedOnly && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
+            Group identical texts
+          </label>
+        )}
+
         {isAdmin && (
           <Btn onClick={runRecheck} disabled={applyMappings.isPending || !unmappedCount}>
             {applyMappings.isPending ? "Rechecking…" : `Recheck unmapped against mappings${unmappedCount ? ` (${unmappedCount})` : ""}`}
@@ -286,6 +304,22 @@ export default function InvoiceDetails({ isAdmin }) {
 
       {error ? (
         <ErrorBox error={error} />
+      ) : showGroups ? (
+        unmappedAll.isLoading ? (
+          <Loading label="Loading every unmapped line…" />
+        ) : unmappedAll.error ? (
+          <ErrorBox error={unmappedAll.error} />
+        ) : (
+          <Card className="p-3">
+            <UnmappedGroups
+              lines={unmappedAll.data || []}
+              itemOptions={itemOptions}
+              suggest={suggest}
+              isAdmin={isAdmin}
+              onPick={(group, itemId) => openRemap(group, itemId)}
+            />
+          </Card>
+        )
       ) : isLoading ? (
         <Loading label="Loading invoice lines…" />
       ) : rows.length === 0 ? (
@@ -368,7 +402,7 @@ export default function InvoiceDetails({ isAdmin }) {
         </>
       )}
 
-      <p className="mt-2 text-xs text-slate-400">
+      <p className={`mt-2 text-xs text-slate-400 ${showGroups ? "hidden" : ""}`}>
         {rows.length} line{rows.length === 1 ? "" : "s"}
         {shownUnmapped ? `, ${shownUnmapped} unmapped` : ""}
         {/* The query returns the 300 most recent lines; say so rather than
@@ -395,6 +429,13 @@ export default function InvoiceDetails({ isAdmin }) {
         {pending && (
           <div className="space-y-3">
             {/* From → to, stacked on mobile so neither side gets squeezed. */}
+            {pending.row.ids && (
+              <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800">
+                Applies to all <strong>{pending.row.ids.length}</strong> line
+                {pending.row.ids.length === 1 ? "" : "s"} with this text.
+              </div>
+            )}
+
             <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm">
               <div className="text-[11px] uppercase tracking-wide text-slate-400">KSeF line</div>
               <div className="break-words font-medium text-slate-800">{pending.row.ksefItemName || "—"}</div>

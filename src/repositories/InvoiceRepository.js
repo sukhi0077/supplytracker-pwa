@@ -190,8 +190,9 @@ export class InvoiceRepository {
     return count || 0;
   }
 
-  // Every unmapped line, not just the page on screen — the recheck must cover
-  // the whole backlog. Minimal columns, paged, so a few thousand rows is cheap.
+  // Every unmapped line, not just the page on screen — both the recheck and the
+  // grouped view need the whole backlog. Slim columns, paged, so a few thousand
+  // rows stay cheap.
   static async getAllUnmappedLines() {
     const page = 1000;
     const out = [];
@@ -200,7 +201,10 @@ export class InvoiceRepository {
         await withTimeout(
           supabase
             .from("invoice_lines")
-            .select("id, ksef_item_name_raw, invoice:invoices(supplier_id)")
+            .select(
+              "id, ksef_item_name_raw, quantity, unit, net_total, " +
+                "invoice:invoices(issue_date, supplier_id, supplier:suppliers(name, ksef_name))",
+            )
             .is("item_id", null)
             .order("id", { ascending: false })
             .range(from, from + page - 1),
@@ -213,7 +217,13 @@ export class InvoiceRepository {
         ...data.map((r) => ({
           id: r.id,
           ksefItemName: r.ksef_item_name_raw || "",
+          quantity: Number(r.quantity || 0),
+          unit: r.unit || "",
+          netTotal: Number(r.net_total || 0),
+          issueDate: r.invoice?.issue_date || "",
           supplierId: r.invoice?.supplier_id || null,
+          supplierName: r.invoice?.supplier?.name || "",
+          supplierKsefName: r.invoice?.supplier?.ksef_name || "",
         })),
       );
       if (data.length < page) break;

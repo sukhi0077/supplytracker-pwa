@@ -41,6 +41,15 @@ export function useInvoiceLines(opts) {
     queryFn: () => InvoiceRepository.getLines(opts),
   });
 }
+// The whole unmapped backlog, for the grouped view (the paged list on screen
+// would group only its own 300 rows and understate every count).
+export function useUnmappedLines(enabled = true) {
+  return useQuery({
+    queryKey: ["invoiceLines", "unmappedAll"],
+    queryFn: InvoiceRepository.getAllUnmappedLines,
+    enabled,
+  });
+}
 // Counted in the DB, not from the loaded page — see countUnmappedLines.
 export function useUnmappedCount() {
   return useQuery({ queryKey: ["invoiceLines", "unmappedCount"], queryFn: InvoiceRepository.countUnmappedLines });
