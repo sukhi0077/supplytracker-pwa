@@ -13,8 +13,9 @@ import {
   useSetLineItem,
   useRemapLine,
   useAddMapping,
+  useApplyLineMappings,
 } from "../hooks/useCatalogue.js";
-import { buildSuggester } from "../utils/ksefMatch.js";
+import { buildSuggester, normalizeKsefName } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
 import ItemPicker from "../components/ui/ItemPicker.jsx";
@@ -40,6 +41,52 @@ export default function InvoiceDetails({ isAdmin }) {
   const setLineItem = useSetLineItem();
   const remap = useRemapLine();
   const addMapping = useAddMapping();
+  const applyMappings = useApplyLineMappings();
+  const [recheck, setRecheck] = useState(null); // { done, matched } | { error }
+
+  // Re-run the KSeF mapping table over lines that are still unmapped.
+  //
+  // Mappings are normally applied by the Worker at fetch time, so a mapping
+  // added or corrected afterwards never reaches invoices already imported.
+  // This closes that gap without re-downloading anything.
+  //
+  // Matching mirrors the Worker: names go through the same normaliser, and a
+  // supplier-specific mapping beats a global one for the same text.
+  const runRecheck = async () => {
+    setRecheck(null);
+    const bySupplier = new Map();
+    const global = new Map();
+    for (const m of mappings || []) {
+      const key = normalizeKsefName(m.ksefItemName || "");
+      if (!key || !m.itemId) continue;
+      if (m.supplierId) bySupplier.set(`${m.supplierId}::${key}`, m);
+      else global.set(key, m);
+    }
+
+    const groups = new Map(); // `${itemId}|${pack}` -> ids
+    let unmapped = 0;
+    for (const r of data || []) {
+      if (r.itemId) continue;
+      unmapped += 1;
+      const key = normalizeKsefName(r.ksefItemName || "");
+      if (!key) continue;
+      const hit = bySupplier.get(`${r.supplierId}::${key}`) || global.get(key);
+      if (!hit) continue;
+      const pack = Number(hit.packSize ?? 1) || 1;
+      const gk = `${hit.itemId}|${pack}`;
+      if (!groups.has(gk)) groups.set(gk, { itemId: hit.itemId, packSize: pack, ids: [] });
+      groups.get(gk).ids.push(r.id);
+    }
+
+    const matched = [...groups.values()].reduce((s, g) => s + g.ids.length, 0);
+    if (!matched) return setRecheck({ done: true, matched: 0, unmapped });
+    try {
+      await applyMappings.mutateAsync([...groups.values()]);
+      setRecheck({ done: true, matched, unmapped });
+    } catch (e) {
+      setRecheck({ error: e.message || "Could not apply mappings." });
+    }
+  };
 
   // Remap confirm dialog state.
   const [pending, setPending] = useState(null); // { row, itemId, packSize, saveMapping }
@@ -199,7 +246,30 @@ export default function InvoiceDetails({ isAdmin }) {
           <input type="checkbox" checked={unmappedOnly} onChange={(e) => setUnmappedOnly(e.target.checked)} />
           Unmapped only {unmappedCount ? `(${unmappedCount})` : ""}
         </label>
+
+        {isAdmin && (
+          <Btn onClick={runRecheck} disabled={applyMappings.isPending || !unmappedCount}>
+            {applyMappings.isPending ? "Rechecking…" : `Recheck unmapped against mappings${unmappedCount ? ` (${unmappedCount})` : ""}`}
+          </Btn>
+        )}
       </div>
+
+      {recheck && (
+        <div
+          className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+            recheck.error
+              ? "border-red-200 bg-red-50 text-red-700"
+              : recheck.matched
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-slate-200 bg-slate-50 text-slate-600"
+          }`}
+        >
+          {recheck.error ||
+            (recheck.matched
+              ? `Mapped ${recheck.matched} of ${recheck.unmapped} unmapped line${recheck.unmapped === 1 ? "" : "s"} from the KSeF mapping table.`
+              : `No mappings matched the ${recheck.unmapped} unmapped line${recheck.unmapped === 1 ? "" : "s"} — map one below and it will apply to the rest.`)}
+        </div>
+      )}
 
       {error ? (
         <ErrorBox error={error} />

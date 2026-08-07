@@ -188,6 +188,32 @@ export class InvoiceRepository {
     return true;
   }
 
+  // Apply the same (item, pack) to many lines at once. Grouped so a batch of
+  // 200 lines that all map to one item costs a single request rather than 200.
+  // `groups` is [{ itemId, packSize, ids: [...] }].
+  static async applyLineMappings(groups) {
+    let changed = 0;
+    for (const g of groups) {
+      const chunk = 200;
+      for (let i = 0; i < g.ids.length; i += chunk) {
+        const slice = g.ids.slice(i, i + chunk);
+        unwrap(
+          await withTimeout(
+            supabase
+              .from("invoice_lines")
+              .update({ item_id: g.itemId, pack_size: Number(g.packSize ?? 1) || 1 })
+              .in("id", slice),
+            20000,
+            "Applying mappings",
+          ),
+          "Applying mappings",
+        );
+        changed += slice.length;
+      }
+    }
+    return changed;
+  }
+
   // Remap a line to an item AND set its pack size (base units per invoice unit).
   static async remapLine(lineId, { itemId, packSize }) {
     const patch = { item_id: itemId || null };

@@ -118,6 +118,8 @@ export const useSetLineItem = () =>
   useInvalidating(({ lineId, itemId }) => InvoiceRepository.setLineItem(lineId, itemId), INVOICE_KEYS);
 export const useRemapLine = () =>
   useInvalidating(({ lineId, patch }) => InvoiceRepository.remapLine(lineId, patch), INVOICE_KEYS);
+export const useApplyLineMappings = () =>
+  useInvalidating((groups) => InvoiceRepository.applyLineMappings(groups), INVOICE_KEYS);
 
 // ---- order log -------------------------------------------------------------
 export const useAddOrderLine = () => useInvalidating((row) => InvoiceDetailRepository.add(row), ["orderLog"]);
