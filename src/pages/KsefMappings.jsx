@@ -11,6 +11,8 @@ import {
 } from "../hooks/useCatalogue.js";
 import { KsefMappingRepository } from "../repositories/KsefMappingRepository.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
+import { SortTh } from "../components/SortTh.jsx";
+import { useSort } from "../hooks/useSort.js";
 import { Field, Text, Select, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
 import Modal from "../components/ui/Modal.jsx";
 
@@ -168,6 +170,9 @@ export default function KsefMappings({ isAdmin }) {
     );
   }, [data, q]);
 
+  // Item first — it's what you scan for; the raw KSeF text is the detail.
+  const { sorted, sort } = useSort(rows, { key: "itemName" });
+
   return (
     <div>
       <PageHeader
@@ -199,20 +204,20 @@ export default function KsefMappings({ isAdmin }) {
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">KSeF text</th>
-                  <th className="px-4 py-3 font-semibold">Item</th>
-                  <th className="px-4 py-3 font-semibold">Supplier</th>
-                  <th className="px-4 py-3 font-semibold text-right">Pack</th>
+                  <SortTh label="Item" field="itemName" sort={sort} className="px-4 py-3" />
+                  <SortTh label="KSeF text" field="ksefItemName" sort={sort} className="px-4 py-3" />
+                  <SortTh label="Supplier" field="supplierName" sort={sort} className="px-4 py-3" />
+                  <SortTh label="Pack" field="packSize" sort={sort} className="px-4 py-3" />
                   {isAdmin && <th className="px-4 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((m) => (
+                {sorted.map((m) => (
                   <tr key={m.id}>
-                    <td className="px-4 py-2.5 text-slate-700">{m.ksefItemName}</td>
                     <td className="px-4 py-2.5 font-medium text-slate-900">{m.itemName}</td>
+                    <td className="px-4 py-2.5 text-slate-700">{m.ksefItemName}</td>
                     <td className="px-4 py-2.5 text-slate-500">{m.supplierName || <span className="text-slate-400">(any)</span>}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-600">{m.packSize}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{m.packSize}</td>
                     {isAdmin && (
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <button onClick={() => { setEditing(m); setOpen(true); }} className="mr-1 rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50">Edit</button>
