@@ -100,15 +100,18 @@ export function Select({ value, onChange, options, placeholder = "—", ...rest 
   );
 }
 
-export function Btn({ children, variant = "ghost", ...rest }) {
+// ghost carries an explicit white fill and a slate-300 border: with no
+// background it disappeared into tinted surfaces (the slate-50 page body, the
+// modal footer) and read as plain text rather than something clickable.
+export function Btn({ children, variant = "ghost", className = "", ...rest }) {
   const styles = {
-    primary: "bg-slate-900 text-white hover:bg-slate-800",
-    ghost: "border border-slate-200 text-slate-700 hover:bg-slate-100",
-    danger: "border border-red-200 text-red-600 hover:bg-red-50",
+    primary: "bg-slate-900 text-white hover:bg-slate-800 shadow-sm",
+    ghost: "border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400",
+    danger: "border border-red-300 bg-white text-red-600 shadow-sm hover:bg-red-50",
   }[variant];
   return (
     <button
-      className={`rounded-lg px-3.5 py-2 text-sm font-semibold disabled:opacity-50 ${styles}`}
+      className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:opacity-50 disabled:shadow-none ${styles} ${className}`}
       {...rest}
     >
       {children}

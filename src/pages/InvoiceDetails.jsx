@@ -279,8 +279,12 @@ export default function InvoiceDetails({ isAdmin }) {
         )}
 
         {isAdmin && (
-          <Btn onClick={runRecheck} disabled={applyMappings.isPending || !unmappedCount}>
-            {applyMappings.isPending ? "Rechecking…" : `Recheck unmapped against mappings${unmappedCount ? ` (${unmappedCount})` : ""}`}
+          <Btn
+            onClick={runRecheck}
+            disabled={applyMappings.isPending || !unmappedCount}
+            title="Re-run the KSeF mapping table over every unmapped line"
+          >
+            {applyMappings.isPending ? "Rechecking…" : `↻ Recheck unmapped${unmappedCount ? ` (${unmappedCount})` : ""}`}
           </Btn>
         )}
       </div>
