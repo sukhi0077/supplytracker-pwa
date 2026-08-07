@@ -20,6 +20,7 @@ import {
 import { InvoiceRepository } from "../repositories/InvoiceRepository.js";
 import { CATCH_ALL } from "../repositories/KsefMappingRepository.js";
 import UnmappedGroups from "../components/UnmappedGroups.jsx";
+import InvoiceView from "../components/InvoiceView.jsx";
 import { buildSuggester, normalizeKsefName } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
@@ -53,6 +54,9 @@ export default function InvoiceDetails({ isAdmin }) {
   const showGroups = unmappedOnly && grouped;
   const unmappedAll = useUnmappedLines(showGroups);
   const [recheck, setRecheck] = useState(null); // { done, matched } | { error }
+  // Full read-only invoice, opened from a line — the rest of the invoice is
+  // often what explains an odd line.
+  const [viewing, setViewing] = useState(null); // { invoiceId, lineId }
 
   // Re-run the KSeF mapping table over lines that are still unmapped.
   //
@@ -395,7 +399,16 @@ export default function InvoiceDetails({ isAdmin }) {
                 {rows.map((r) => (
                   <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-slate-500">{r.issueDate}</td>
-                    <td className="px-3 py-2 align-top text-slate-600"><span className="block truncate" title={r.invoiceNumber}>{r.invoiceNumber}</span></td>
+                    <td className="px-3 py-2 align-top">
+                      <button
+                        type="button"
+                        onClick={() => setViewing({ invoiceId: r.invoiceId, lineId: r.id })}
+                        title={`${r.invoiceNumber} — show the whole invoice`}
+                        className="block w-full truncate text-left text-teal-700 underline decoration-teal-300 underline-offset-2 hover:decoration-teal-600"
+                      >
+                        {r.invoiceNumber}
+                      </button>
+                    </td>
                     <td className="px-3 py-2 align-top text-slate-600"><span className="block truncate" title={r.supplierName}>{r.supplierName}</span></td>
                     <td className="break-words px-3 py-2 align-top text-slate-800">{r.ksefItemName}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right align-top text-slate-600">{num(r.quantity)} {r.unit}</td>
@@ -417,7 +430,14 @@ export default function InvoiceDetails({ isAdmin }) {
                 className={`rounded-xl border p-3 ${r.itemId ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50/50"}`}
               >
                 <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
-                  <span className="whitespace-nowrap">{r.invoiceNumber} · {r.issueDate}</span>
+                  <button
+                    type="button"
+                    onClick={() => setViewing({ invoiceId: r.invoiceId, lineId: r.id })}
+                    className="min-w-0 truncate text-left text-teal-700 underline decoration-teal-300 underline-offset-2"
+                  >
+                    {r.invoiceNumber}
+                  </button>
+                  <span className="whitespace-nowrap">{r.issueDate}</span>
                   <span className="truncate text-right">{r.supplierName}</span>
                 </div>
                 <div className="mt-1 break-words text-sm font-medium text-slate-800">{r.ksefItemName}</div>
@@ -442,6 +462,13 @@ export default function InvoiceDetails({ isAdmin }) {
         {unmappedCount > shownUnmapped && ` · ${unmappedCount} unmapped in total`}. Suggestions are ranked by a
         confidence score; click one (or pick from the list) to review and confirm.
       </p>
+
+      <InvoiceView
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        invoiceId={viewing?.invoiceId}
+        highlightLineId={viewing?.lineId}
+      />
 
       {/* Remap confirm dialog */}
       <Modal

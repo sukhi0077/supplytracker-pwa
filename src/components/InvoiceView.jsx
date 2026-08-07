@@ -7,9 +7,17 @@ import { Loading, ErrorBox, Pill } from "./ui/parts.jsx";
 const money = (v) => (v == null ? "" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const num = (v) => (v == null || v === "" ? "" : Number(v).toLocaleString());
 
-// `highlightItemId` marks the line you arrived from, so opening an invoice from
-// item analysis doesn't leave you hunting for the row you were looking at.
-export default function InvoiceView({ open, onClose, invoiceId, highlightItemId = null }) {
+// `highlightItemId` / `highlightLineId` mark the line you arrived from, so
+// opening an invoice doesn't leave you hunting for the row you were looking at.
+// The line id is the precise one — it also works for lines with no item yet,
+// which is exactly the case when you're arriving from an unmapped row.
+export default function InvoiceView({
+  open,
+  onClose,
+  invoiceId,
+  highlightItemId = null,
+  highlightLineId = null,
+}) {
   const { data, isLoading, error } = useInvoice(invoiceId);
 
   return (
@@ -62,7 +70,15 @@ export default function InvoiceView({ open, onClose, invoiceId, highlightItemId 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(data.lines || []).map((l) => (
-                  <tr key={l.id} className={highlightItemId && l.item_id === highlightItemId ? "bg-teal-50" : ""}>
+                  <tr
+                    key={l.id}
+                    className={
+                      (highlightLineId && l.id === highlightLineId) ||
+                      (!highlightLineId && highlightItemId && l.item_id === highlightItemId)
+                        ? "bg-teal-50"
+                        : ""
+                    }
+                  >
                     <td className="px-3 py-2 text-slate-400">{l.line_no}</td>
                     <td className="px-3 py-2">{l.item?.name || l.ksef_item_name_raw}</td>
                     <td className="px-3 py-2 text-right">{num(l.quantity)} {l.unit}</td>
