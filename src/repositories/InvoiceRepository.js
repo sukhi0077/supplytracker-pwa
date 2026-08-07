@@ -231,6 +231,22 @@ export class InvoiceRepository {
     return out;
   }
 
+  // Line ids + current mapping for one invoice, so "map the whole invoice" can
+  // say how many lines it will touch and how many already point elsewhere.
+  static async getInvoiceLineRefs(invoiceId) {
+    if (!invoiceId) return [];
+    return (
+      unwrap(
+        await withTimeout(
+          supabase.from("invoice_lines").select("id, item_id").eq("invoice_id", invoiceId),
+          15000,
+          "Loading invoice lines",
+        ),
+        "Loading invoice lines",
+      ) || []
+    );
+  }
+
   static async setLineItem(lineId, itemId) {
     unwrap(
       await withTimeout(

@@ -3,7 +3,7 @@
 // "Invoice Details"): every invoice LINE with the catalogue item it maps to,
 // ranked fuzzy suggestions with a confidence %, and a remap confirm dialog
 // (pack size + "save as KSeF mapping for this supplier").
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useInvoiceLines,
   useItems,
@@ -116,8 +116,21 @@ export default function InvoiceDetails({ isAdmin }) {
   };
 
   // Remap confirm dialog state.
-  const [pending, setPending] = useState(null); // { row, itemId, packSize, saveMapping }
+  const [pending, setPending] = useState(null); // { row, itemId, packSize, saveMapping, scope }
   const [pendingErr, setPendingErr] = useState("");
+  // Sibling lines on the same invoice, for the "whole invoice" scope.
+  const [siblings, setSiblings] = useState(null);
+
+  useEffect(() => {
+    const invoiceId = pending?.row?.invoiceId;
+    if (!invoiceId) return setSiblings(null);
+    let alive = true;
+    setSiblings(null);
+    InvoiceRepository.getInvoiceLineRefs(invoiceId)
+      .then((refs) => alive && setSiblings(refs))
+      .catch(() => alive && setSiblings([]));
+    return () => { alive = false; };
+  }, [pending?.row?.invoiceId]);
 
   const itemOptions = useMemo(
     () => (items || []).filter((i) => i.isActive).sort((a, b) => a.name.localeCompare(b.name)),
@@ -181,12 +194,13 @@ export default function InvoiceDetails({ isAdmin }) {
       itemId,
       packSize: String(parseFloat(row.packSize || 1) || 1),
       saveMapping: !!row.ksefItemName,
+      scope: row.ids ? "group" : "line",
     });
   };
 
   const confirmRemap = async () => {
     if (!pending) return;
-    const { row, itemId, packSize, saveMapping } = pending;
+    const { row, itemId, packSize, saveMapping, scope } = pending;
     setPendingErr("");
     // Fractional packs are legitimate (a 0.2 kg tub of a kg item), so the only
     // rule is "a positive number" — never silently fall back to 1.
@@ -197,8 +211,10 @@ export default function InvoiceDetails({ isAdmin }) {
     }
     try {
       // A group carries every line sharing this text; one write covers them all.
-      if (row.ids) {
+      if (scope === "group" && row.ids) {
         await applyMappings.mutateAsync([{ itemId, packSize: pack, ids: row.ids }]);
+      } else if (scope === "invoice") {
+        await applyMappings.mutateAsync([{ itemId, packSize: pack, ids: (siblings || []).map((s) => s.id) }]);
       } else {
         await remap.mutateAsync({ lineId: row.id, patch: { itemId, packSize: pack } });
       }
@@ -444,10 +460,44 @@ export default function InvoiceDetails({ isAdmin }) {
         {pending && (
           <div className="space-y-3">
             {/* From → to, stacked on mobile so neither side gets squeezed. */}
-            {pending.row.ids && (
+            {/* Scope. A utility invoice is often several charge lines that are
+                all the same thing, so "the whole invoice" saves repeating the
+                same decision down the page. */}
+            {pending.row.ids ? (
               <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800">
                 Applies to all <strong>{pending.row.ids.length}</strong> line
                 {pending.row.ids.length === 1 ? "" : "s"} with this text.
+              </div>
+            ) : (
+              <div className="space-y-1.5 rounded-lg border border-slate-200 px-3 py-2.5">
+                <div className="text-xs font-semibold text-slate-600">Apply to</div>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    checked={pending.scope !== "invoice"}
+                    onChange={() => setPending({ ...pending, scope: "line" })}
+                  />
+                  This line only
+                </label>
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    className="mt-1"
+                    disabled={!siblings || siblings.length < 2}
+                    checked={pending.scope === "invoice"}
+                    onChange={() => setPending({ ...pending, scope: "invoice" })}
+                  />
+                  <span className="min-w-0">
+                    Every line on invoice <strong className="break-words">{pending.row.invoiceNumber}</strong>
+                    {siblings ? ` (${siblings.length})` : " …"}
+                    {siblings && siblings.filter((s) => s.item_id && s.item_id !== pending.itemId).length > 0 && (
+                      <span className="mt-0.5 block text-[11px] text-amber-600">
+                        {siblings.filter((s) => s.item_id && s.item_id !== pending.itemId).length} of them are already
+                        mapped to something else and would be overwritten.
+                      </span>
+                    )}
+                  </span>
+                </label>
               </div>
             )}
 
