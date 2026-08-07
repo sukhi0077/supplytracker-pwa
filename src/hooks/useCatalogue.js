@@ -41,6 +41,10 @@ export function useInvoiceLines(opts) {
     queryFn: () => InvoiceRepository.getLines(opts),
   });
 }
+// Counted in the DB, not from the loaded page — see countUnmappedLines.
+export function useUnmappedCount() {
+  return useQuery({ queryKey: ["invoiceLines", "unmappedCount"], queryFn: InvoiceRepository.countUnmappedLines });
+}
 export function useMappings() {
   return useQuery({ queryKey: ["ksefMappings"], queryFn: KsefMappingRepository.getAll });
 }

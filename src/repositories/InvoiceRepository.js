@@ -176,6 +176,51 @@ export class InvoiceRepository {
     }));
   }
 
+  // True number of unmapped lines. getLines() caps at 300 rows, so counting the
+  // rows it returned reported "80 unmapped" when unfiltered (80 of the latest
+  // 300) and "140" when filtered (the latest 300 unmapped) — two different
+  // numbers for the same question. head+exact asks the DB instead.
+  static async countUnmappedLines() {
+    const { count, error } = await withTimeout(
+      supabase.from("invoice_lines").select("id", { count: "exact", head: true }).is("item_id", null),
+      15000,
+      "Counting unmapped lines",
+    );
+    if (error) throw error;
+    return count || 0;
+  }
+
+  // Every unmapped line, not just the page on screen — the recheck must cover
+  // the whole backlog. Minimal columns, paged, so a few thousand rows is cheap.
+  static async getAllUnmappedLines() {
+    const page = 1000;
+    const out = [];
+    for (let from = 0; ; from += page) {
+      const data = unwrap(
+        await withTimeout(
+          supabase
+            .from("invoice_lines")
+            .select("id, ksef_item_name_raw, invoice:invoices(supplier_id)")
+            .is("item_id", null)
+            .order("id", { ascending: false })
+            .range(from, from + page - 1),
+          20000,
+          "Loading unmapped lines",
+        ),
+        "Loading unmapped lines",
+      ) || [];
+      out.push(
+        ...data.map((r) => ({
+          id: r.id,
+          ksefItemName: r.ksef_item_name_raw || "",
+          supplierId: r.invoice?.supplier_id || null,
+        })),
+      );
+      if (data.length < page) break;
+    }
+    return out;
+  }
+
   static async setLineItem(lineId, itemId) {
     unwrap(
       await withTimeout(

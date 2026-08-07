@@ -14,7 +14,9 @@ import {
   useRemapLine,
   useAddMapping,
   useApplyLineMappings,
+  useUnmappedCount,
 } from "../hooks/useCatalogue.js";
+import { InvoiceRepository } from "../repositories/InvoiceRepository.js";
 import { buildSuggester, normalizeKsefName } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
@@ -42,6 +44,7 @@ export default function InvoiceDetails({ isAdmin }) {
   const remap = useRemapLine();
   const addMapping = useAddMapping();
   const applyMappings = useApplyLineMappings();
+  const unmappedTotal = useUnmappedCount();
   const [recheck, setRecheck] = useState(null); // { done, matched } | { error }
 
   // Re-run the KSeF mapping table over lines that are still unmapped.
@@ -63,10 +66,17 @@ export default function InvoiceDetails({ isAdmin }) {
       else global.set(key, m);
     }
 
+    // Work over EVERY unmapped line, not the 300 currently on screen.
+    let all;
+    try {
+      all = await InvoiceRepository.getAllUnmappedLines();
+    } catch (e) {
+      return setRecheck({ error: e.message || "Could not load unmapped lines." });
+    }
+
     const groups = new Map(); // `${itemId}|${pack}` -> ids
     let unmapped = 0;
-    for (const r of data || []) {
-      if (r.itemId) continue;
+    for (const r of all) {
       unmapped += 1;
       const key = normalizeKsefName(r.ksefItemName || "");
       if (!key) continue;
@@ -114,7 +124,10 @@ export default function InvoiceDetails({ isAdmin }) {
     );
   }, [data, q]);
 
-  const unmappedCount = (data || []).filter((r) => !r.itemId).length;
+  // Real total from the DB. Counting the loaded rows gave a different answer
+  // depending on the filter, because getLines() only returns 300 of them.
+  const unmappedCount = unmappedTotal.data ?? 0;
+  const shownUnmapped = (data || []).filter((r) => !r.itemId).length;
 
   const suggestionsByLine = useMemo(() => {
     if (!suggest) return {};
@@ -356,8 +369,13 @@ export default function InvoiceDetails({ isAdmin }) {
       )}
 
       <p className="mt-2 text-xs text-slate-400">
-        {rows.length} line{rows.length === 1 ? "" : "s"}. Suggestions are ranked by a confidence score; click one (or
-        pick from the list) to review and confirm.
+        {rows.length} line{rows.length === 1 ? "" : "s"}
+        {shownUnmapped ? `, ${shownUnmapped} unmapped` : ""}
+        {/* The query returns the 300 most recent lines; say so rather than
+            looking like the whole catalogue. */}
+        {(data || []).length >= 300 && " — latest 300 shown, narrow with search"}
+        {unmappedCount > shownUnmapped && ` · ${unmappedCount} unmapped in total`}. Suggestions are ranked by a
+        confidence score; click one (or pick from the list) to review and confirm.
       </p>
 
       {/* Remap confirm dialog */}
