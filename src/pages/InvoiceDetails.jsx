@@ -215,35 +215,49 @@ export default function InvoiceDetails({ isAdmin }) {
         <>
           {/* Desktop / tablet: table */}
           <Card className="hidden overflow-hidden md:block">
+            {/* table-fixed with explicit widths: the columns previously sized
+                themselves to their content, so one long KSeF description pushed
+                the table past the card and forced horizontal scrolling. Long
+                text now wraps inside its column instead. */}
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-3 py-3 font-semibold">Date</th>
-                    <th className="px-3 py-3 font-semibold">Invoice</th>
-                    <th className="px-3 py-3 font-semibold">Supplier</th>
-                    <th className="px-3 py-3 font-semibold">KSeF line text</th>
-                    <th className="px-3 py-3 font-semibold text-right">Qty</th>
-                    <th className="px-3 py-3 font-semibold text-right">Net</th>
-                    <th className="px-3 py-3 font-semibold text-right">Gross</th>
-                    <th className="px-3 py-3 font-semibold">Mapped item</th>
+            <table className="w-full min-w-[980px] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[92px]" />
+                <col className="w-[120px]" />
+                <col className="w-[12%]" />
+                <col />
+                <col className="w-[96px]" />
+                <col className="w-[92px]" />
+                <col className="w-[92px]" />
+                <col className="w-[22%]" />
+              </colgroup>
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-3 font-semibold">Date</th>
+                  <th className="px-3 py-3 font-semibold">Invoice</th>
+                  <th className="px-3 py-3 font-semibold">Supplier</th>
+                  <th className="px-3 py-3 font-semibold">KSeF line text</th>
+                  <th className="px-3 py-3 text-right font-semibold">Qty</th>
+                  <th className="px-3 py-3 text-right font-semibold">Net</th>
+                  <th className="px-3 py-3 text-right font-semibold">Gross</th>
+                  <th className="px-3 py-3 font-semibold">Mapped item</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((r) => (
+                  <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
+                    <td className="whitespace-nowrap px-3 py-2 align-top text-slate-500">{r.issueDate}</td>
+                    <td className="px-3 py-2 align-top text-slate-600"><span className="block truncate" title={r.invoiceNumber}>{r.invoiceNumber}</span></td>
+                    <td className="px-3 py-2 align-top text-slate-600"><span className="block truncate" title={r.supplierName}>{r.supplierName}</span></td>
+                    <td className="break-words px-3 py-2 align-top text-slate-800">{r.ksefItemName}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right align-top text-slate-600">{num(r.quantity)} {r.unit}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right align-top text-slate-600">{money(r.netTotal)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right align-top font-medium text-slate-800">{money(r.grossTotal)}</td>
+                    <td className="px-3 py-2 align-top">{renderMapControl(r)}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((r) => (
-                    <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.issueDate}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">{r.invoiceNumber}</td>
-                      <td className="px-3 py-2 text-slate-600">{r.supplierName}</td>
-                      <td className="px-3 py-2 text-slate-800">{r.ksefItemName}</td>
-                      <td className="px-3 py-2 text-right text-slate-600">{num(r.quantity)} {r.unit}</td>
-                      <td className="px-3 py-2 text-right text-slate-600">{money(r.netTotal)}</td>
-                      <td className="px-3 py-2 text-right font-medium text-slate-800">{money(r.grossTotal)}</td>
-                      <td className="min-w-[220px] px-3 py-2">{renderMapControl(r)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                ))}
+              </tbody>
+            </table>
             </div>
           </Card>
 

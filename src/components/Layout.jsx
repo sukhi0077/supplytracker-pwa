@@ -76,7 +76,10 @@ export default function Layout({ user, isAdmin, adminError, onLogout }) {
         />
       )}
 
-      <div className="mx-auto flex max-w-7xl">
+      {/* max-w-7xl (1280px) left a wide margin on a laptop while data tables
+          scrolled sideways inside it. 1760px uses the screen without letting
+          text runs get unreadably long on an ultrawide. */}
+      <div className="mx-auto flex max-w-[1760px]">
         {/* Sidebar / drawer */}
         <aside
           className={`fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-xs flex-col overflow-y-auto overscroll-contain border-r border-slate-200 bg-white p-4 shadow-2xl transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:max-w-none lg:translate-x-0 lg:shadow-none lg:transition-none ${
