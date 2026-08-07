@@ -3,6 +3,11 @@
 // (backend core/views.py). Produces ranked suggestions with a confidence %.
 
 // ---- normalization (port of core/ksef/matching.py) -------------------------
+// "2026r." / "2026 r." / "2026 roku" — the Polish year marker, detached before
+// the date patterns run. Without this, "…z dnia 28.08.2026r." kept its date
+// (the trailing \b can't fire between "6" and "r"), so every month normalised
+// to a different key and arrived as a brand-new unmapped line.
+const YEAR_SUFFIX = /(\d{4})\s*(?:roku|r\.?)(?=\W|$)/gi;
 const DATE_FULL = /\b\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}\b|\b\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}\b/g;
 const DATE_MONTH_YEAR = /\b\d{1,2}[.\-/]\d{4}\b/g;
 const DASH_CONNECTOR = /\s+[-–—]\s+/g;
@@ -23,6 +28,7 @@ function tokenIsNoise(tok) {
 export function normalizeKsefName(name) {
   if (!name) return "";
   let s = String(name).toLowerCase().trim();
+  s = s.replace(YEAR_SUFFIX, "$1 ");
   s = s.replace(DATE_FULL, " ").replace(DATE_MONTH_YEAR, " ").replace(DASH_CONNECTOR, " ");
   s = s.split(/\s+/).filter((t) => !tokenIsNoise(t)).join(" ");
   s = s.replace(WS, " ");
