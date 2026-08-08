@@ -80,27 +80,40 @@ export function useDateRange(initialPreset = "month") {
 // Arrows are their own outlined buttons with a gap either side of the month —
 // they're a different kind of action (step) from the label (select), and butted
 // together they read as one wide button.
-const ARROW =
-  "rounded-md border border-slate-300 bg-white px-2 py-1 text-base leading-none text-slate-500 " +
+const ARROW_BASE =
+  "rounded-lg border border-slate-300 bg-white leading-none text-slate-500 " +
   "hover:bg-slate-50 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-white";
 
-function MonthStepper({ range }) {
+// "md" matches Btn exactly (px-3.5 py-2 text-sm) so the stepper lines up with a
+// primary button beside it; "sm" is the compact form used inside the toolbar.
+const SIZES = {
+  md: { arrow: "px-3 py-2 text-sm", label: "px-3 py-2 text-sm min-w-[104px]" },
+  sm: { arrow: "px-2 py-1 text-base", label: "px-2.5 py-1 text-xs min-w-[86px]" },
+};
+
+function MonthStepper({ range, size = "sm" }) {
   const { preset, setPreset, anchor, stepMonth, atCurrentMonth } = range;
+  const s = SIZES[size] || SIZES.sm;
   return (
     <>
-      <button onClick={() => stepMonth(-1)} aria-label="Previous month" className={ARROW}>
+      <button onClick={() => stepMonth(-1)} aria-label="Previous month" className={`${ARROW_BASE} ${s.arrow}`}>
         ‹
       </button>
       <button
         onClick={() => setPreset("month")}
         title="Show this month"
-        className={`min-w-[86px] whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${
+        className={`whitespace-nowrap rounded-lg font-semibold ${s.label} ${
           preset === "month" ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"
         }`}
       >
         {monthName(anchor)}
       </button>
-      <button onClick={() => stepMonth(1)} disabled={atCurrentMonth} aria-label="Next month" className={ARROW}>
+      <button
+        onClick={() => stepMonth(1)}
+        disabled={atCurrentMonth}
+        aria-label="Next month"
+        className={`${ARROW_BASE} ${s.arrow}`}
+      >
         ›
       </button>
     </>
@@ -109,18 +122,22 @@ function MonthStepper({ range }) {
 
 // With presets: one bordered toolbar. Without them (`presets={false}`), just the
 // stepper — no outer box for three controls to sit in.
-export function DateRangeBar({ range, presets = true, className = "" }) {
+export function DateRangeBar({ range, presets = true, size, className = "" }) {
   const { preset, setPreset } = range;
 
   if (!presets) {
-    return <div className={`flex items-center gap-1.5 ${className}`}><MonthStepper range={range} /></div>;
+    return (
+      <div className={`flex items-center gap-1.5 ${className}`}>
+        <MonthStepper range={range} size={size || "md"} />
+      </div>
+    );
   }
 
   return (
     <div
       className={`flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-1.5 py-1 ${className}`}
     >
-      <MonthStepper range={range} />
+      <MonthStepper range={range} size={size || "sm"} />
 
       <span className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
 
