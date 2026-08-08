@@ -40,7 +40,15 @@ export default function InvoiceDetails({ isAdmin }) {
   const [grouped, setGrouped] = useState(true);
   const [q, setQ] = useState("");
 
-  const { data, isLoading, error } = useInvoiceLines({ unmappedOnly });
+  // Debounced so typing doesn't fire a query per keystroke. The search runs in
+  // the DB, so it reaches lines outside the 300 currently loaded.
+  const [qDebounced, setQDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const { data, isLoading, isFetching, error } = useInvoiceLines({ unmappedOnly, search: qDebounced });
   const { data: items } = useItems();
   const { data: master } = useMasterData();
   const { data: mappings } = useMappings();
@@ -148,9 +156,11 @@ export default function InvoiceDetails({ isAdmin }) {
     return buildSuggester({ items, mappings: mappings || [], suppliers: suppliers || [] });
   }, [items, mappings, suppliers]);
 
+  // Filtering happens in the query now; the local pass only narrows further
+  // while the debounce is still pending, so results don't lag the keystrokes.
   const rows = useMemo(() => {
     const n = q.trim().toLowerCase();
-    if (!n) return data || [];
+    if (!n || n === qDebounced.toLowerCase()) return data || [];
     return (data || []).filter(
       (r) =>
         r.ksefItemName.toLowerCase().includes(n) ||
@@ -158,7 +168,7 @@ export default function InvoiceDetails({ isAdmin }) {
         r.invoiceNumber.toLowerCase().includes(n) ||
         r.supplierName.toLowerCase().includes(n),
     );
-  }, [data, q]);
+  }, [data, q, qDebounced]);
 
   // Newest first, matching the order the query returns.
   const { sorted, sort } = useSort(rows, { key: "issueDate", dir: "desc" });
@@ -299,7 +309,7 @@ export default function InvoiceDetails({ isAdmin }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search KSeF text, item, invoice, supplier…"
+          placeholder="Search all lines — KSeF text, item, invoice, supplier…"
           className="w-full max-w-sm rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
         />
         <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -461,9 +471,10 @@ export default function InvoiceDetails({ isAdmin }) {
       <p className={`mt-2 text-xs text-slate-400 ${showGroups ? "hidden" : ""}`}>
         {rows.length} line{rows.length === 1 ? "" : "s"}
         {shownUnmapped ? `, ${shownUnmapped} unmapped` : ""}
-        {/* The query returns the 300 most recent lines; say so rather than
-            looking like the whole catalogue. */}
-        {(data || []).length >= 300 && " — latest 300 shown, narrow with search"}
+        {/* The query caps at 300 rows. When searching that's 300 MATCHES from
+            the whole table, not 300 recent lines filtered down. */}
+        {(data || []).length >= 300 &&
+          (qDebounced ? " — first 300 matches, narrow the search" : " — latest 300 shown, search to reach older lines")}
         {unmappedCount > shownUnmapped && ` · ${unmappedCount} unmapped in total`}. Suggestions are ranked by a
         confidence score; click one (or pick from the list) to review and confirm.
       </p>

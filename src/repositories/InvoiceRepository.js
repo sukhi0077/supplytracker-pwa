@@ -144,17 +144,72 @@ export class InvoiceRepository {
   // Invoice LINE items across all invoices — the "Invoice details" view. Joins
   // the parent invoice (number/date/supplier) and the mapped catalogue item.
   static async getLines({ unmappedOnly = false, search = "", limit = 300 } = {}) {
-    let q = supabase
-      .from("invoice_lines")
-      .select(
-        "id, invoice_id, line_no, item_id, ksef_item_name_raw, quantity, unit, net_total, vat_rate, gross_total, pack_size, " +
-          "invoice:invoices(number, issue_date, supplier:suppliers(id, name, ksef_name)), item:items(name)",
-      )
-      .order("id", { ascending: false })
-      .limit(limit);
-    if (unmappedOnly) q = q.is("item_id", null);
-    if (search.trim()) q = q.ilike("ksef_item_name_raw", `%${search.trim()}%`);
-    const data = unwrap(await withTimeout(q, 15000, "Loading invoice lines"), "Loading invoice lines");
+    const LINE_SELECT =
+      "id, invoice_id, line_no, item_id, ksef_item_name_raw, quantity, unit, net_total, vat_rate, gross_total, pack_size, " +
+      "invoice:invoices(number, issue_date, supplier:suppliers(id, name, ksef_name)), item:items(name)";
+
+    const base = () => {
+      let q = supabase.from("invoice_lines").select(LINE_SELECT).order("id", { ascending: false }).limit(limit);
+      if (unmappedOnly) q = q.is("item_id", null);
+      return q;
+    };
+
+    const term = search.trim();
+    let data;
+
+    if (!term) {
+      data = unwrap(await withTimeout(base(), 15000, "Loading invoice lines"), "Loading invoice lines");
+    } else {
+      // Search the WHOLE table, not the 300 rows already on screen — filtering
+      // the loaded page meant anything older than the latest 300 was invisible
+      // however specific the term was.
+      //
+      // The term can match the line text, the invoice number, the supplier or
+      // the mapped item. PostgREST can't OR across embedded tables, so the
+      // related ids are resolved first and the line query is filtered by them.
+      const like = `%${term.replace(/[%_]/g, (c) => `\\${c}`)}%`;
+
+      const [byNumber, bySupplier, byItem] = await Promise.all([
+        withTimeout(supabase.from("invoices").select("id").ilike("number", like), 15000, "Searching invoice numbers"),
+        // `!inner` makes the join a filter rather than an optional embed, which
+        // is what lets the supplier name narrow the invoices.
+        withTimeout(
+          supabase.from("invoices").select("id, suppliers!inner(name)").ilike("suppliers.name", like),
+          15000,
+          "Searching suppliers",
+        ),
+        withTimeout(supabase.from("items").select("id").ilike("name", like), 15000, "Searching items"),
+      ]);
+
+      const invoiceIds = [
+        ...new Set(
+          [
+            ...(unwrap(byNumber, "Searching invoice numbers") || []),
+            ...(unwrap(bySupplier, "Searching suppliers") || []),
+          ].map((i) => i.id),
+        ),
+      ];
+      const itemIds = (unwrap(byItem, "Searching items") || []).map((i) => i.id);
+
+      const queries = [base().ilike("ksef_item_name_raw", like)];
+      if (invoiceIds.length) queries.push(base().in("invoice_id", invoiceIds.slice(0, 500)));
+      if (itemIds.length) queries.push(base().in("item_id", itemIds.slice(0, 500)));
+
+      const results = await Promise.all(
+        queries.map((q) => withTimeout(q, 20000, "Searching invoice lines")),
+      );
+      const seen = new Set();
+      data = [];
+      for (const r of results) {
+        for (const row of unwrap(r, "Searching invoice lines") || []) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          data.push(row);
+        }
+      }
+      data.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+      data = data.slice(0, limit);
+    }
     return (data || []).map((r) => ({
       id: r.id,
       invoiceId: r.invoice_id,
