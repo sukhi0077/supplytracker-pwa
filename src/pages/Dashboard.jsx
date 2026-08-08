@@ -30,28 +30,37 @@ import ItemAnalysisTab from "../components/dashboard/ItemAnalysisTab.jsx";
 const iso = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-function rangeFor(preset) {
+// `anchor` is { y, m } — the month the navigator is pointing at.
+function rangeFor(preset, anchor) {
   const now = new Date();
   const to = iso(now);
   const y = now.getFullYear();
   const m = now.getMonth();
 
-  if (preset === "month") return { from: iso(new Date(y, m, 1)), to };
-  // Whole previous month: the 1st through day 0 of this month = its last day.
-  if (preset === "prev") return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) };
+  if (preset === "month") {
+    const a = anchor || { y, m };
+    const isCurrent = a.y === y && a.m === m;
+    return {
+      from: iso(new Date(a.y, a.m, 1)),
+      // Day 0 of the next month is the last day of this one. The current month
+      // stops at today rather than running into the future.
+      to: isCurrent ? to : iso(new Date(a.y, a.m + 1, 0)),
+    };
+  }
   if (preset === "ytd") return { from: `${y}-01-01`, to };
   const n = { "3m": 3, "6m": 6 }[preset] ?? 3;
   return { from: iso(new Date(y, m - n, now.getDate())), to };
 }
 
 const PRESETS = [
-  { key: "month", label: "This month" },
-  { key: "prev", label: "Last month" },
   { key: "3m", label: "3M" },
   { key: "6m", label: "6M" },
   { key: "ytd", label: "YTD" },
   { key: "custom", label: "Custom" },
 ];
+
+const monthName = (a) =>
+  new Date(a.y, a.m, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -66,15 +75,32 @@ export default function Dashboard() {
   // sensible rather than empty.
   const [customFrom, setCustomFrom] = useState(() => rangeFor("3m").from);
   const [customTo, setCustomTo] = useState(() => iso(new Date()));
+  const [anchor, setAnchor] = useState(() => {
+    const d = new Date();
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+
+  // Can't step past the current month — there's nothing there.
+  const nowRef = new Date();
+  const atCurrentMonth = anchor.y === nowRef.getFullYear() && anchor.m === nowRef.getMonth();
+  const stepMonth = (delta) => {
+    setPreset("month");
+    setAnchor((a) => {
+      const d = new Date(a.y, a.m + delta, 1);
+      const n = new Date();
+      if (d > new Date(n.getFullYear(), n.getMonth(), 1)) return a;
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  };
 
   const { from, to } = useMemo(() => {
-    if (preset !== "custom") return rangeFor(preset);
+    if (preset !== "custom") return rangeFor(preset, anchor);
     // Tolerate the dates being entered the wrong way round.
     const a = customFrom || undefined;
     const b = customTo || undefined;
     if (a && b && a > b) return { from: b, to: a };
     return { from: a, to: b };
-  }, [preset, customFrom, customTo]);
+  }, [preset, customFrom, customTo, anchor]);
 
   const analytics = usePurchaseAnalytics(from, to);
   const items = useItems();
@@ -207,7 +233,44 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1">
+        <div className="-mx-1 flex max-w-full items-center gap-1 overflow-x-auto px-1 pb-1">
+          {/* Month navigator — replaces the This month / Last month buttons,
+              so any month is two clicks away instead of only the last two. */}
+          <div
+            className={`flex items-center overflow-hidden rounded-md border ${
+              preset === "month" ? "border-teal-600" : "border-slate-300"
+            }`}
+          >
+            <button
+              onClick={() => stepMonth(-1)}
+              aria-label="Previous month"
+              className={`px-2 py-1.5 text-sm ${
+                preset === "month" ? "bg-teal-600 text-white hover:bg-teal-700" : "bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              ‹
+            </button>
+            <button
+              onClick={() => setPreset("month")}
+              title="Show this month"
+              className={`min-w-[86px] whitespace-nowrap px-2 py-1.5 text-xs font-semibold ${
+                preset === "month" ? "bg-teal-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {monthName(anchor)}
+            </button>
+            <button
+              onClick={() => stepMonth(1)}
+              disabled={atCurrentMonth}
+              aria-label="Next month"
+              className={`px-2 py-1.5 text-sm disabled:opacity-40 ${
+                preset === "month" ? "bg-teal-600 text-white hover:bg-teal-700" : "bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              ›
+            </button>
+          </div>
+
           {PRESETS.map((p) => (
             <button
               key={p.key}
