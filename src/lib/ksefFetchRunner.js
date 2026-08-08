@@ -35,10 +35,14 @@ export async function startKsefFetch(params, { onData } = {}) {
       state.progress = `Fetching (run ${round})…`;
       emit();
       const res = await KsefJobRepository.runFetch(params);
-      totals.found = res.found ?? totals.found;
+      // "found" is the size of the matching invoice set for this date range.
+      // Freeze it at round 1: re-querying it every round let a mid-session
+      // drift (KSeF returning a slightly different count, or our own writes
+      // shifting what "already imported" means) move the total out from
+      // under the running created/updated/remaining figures below.
+      if (round === 1) totals.found = res.found ?? 0;
       totals.created += res.created ?? 0;
       totals.updated += res.updated ?? 0;
-      totals.skipped = res.skipped ?? totals.skipped;
       // The worker's own count, not session arithmetic. It skips invoices
       // refreshed in the last half hour, so a pass genuinely reaches 0 —
       // deriving "left" here from totals was guesswork that drifted.
@@ -47,6 +51,13 @@ export async function startKsefFetch(params, { onData } = {}) {
       // An older Worker could still loop and report more updates than found.
       const cap = totals.found || Infinity;
       if (totals.created + totals.updated > cap) totals.updated = Math.max(0, cap - totals.created);
+      // skipped is derived, not summed from the Worker's per-round res.skipped:
+      // a round's res.skipped includes invoices THIS session already updated
+      // (they're "recently refreshed" so the next round excludes them as
+      // candidates), so summing it across rounds would double-count them.
+      // Deriving it from found = created + updated + skipped + remaining keeps
+      // the totals internally consistent no matter how many rounds run.
+      totals.skipped = Math.max(0, totals.found - totals.created - totals.updated - totals.remaining);
       totals.errors = [...totals.errors, ...(res.errors || [])];
       totals.note = res.note || "";
       state.summary = { ...totals };

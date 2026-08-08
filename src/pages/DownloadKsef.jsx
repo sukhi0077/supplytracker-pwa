@@ -271,6 +271,7 @@ export default function DownloadKsef({ isAdmin }) {
           {fs.summary && (
             <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               {fs.busy ? "So far" : "Done"}: {fs.summary.found ?? "?"} found · {fs.summary.created ?? 0} new · {fs.summary.updated ?? 0} updated
+              {fs.summary.skipped ? ` · ${fs.summary.skipped} skipped` : ""}
               {fs.summary.remaining ? ` · ${fs.summary.remaining} left` : ""}
               {fs.summary.errors?.length ? ` · ${fs.summary.errors.length} error(s)` : ""}
               {fs.summary.note ? <div className="mt-1 text-xs text-emerald-700">{fs.summary.note}</div> : null}
