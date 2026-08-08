@@ -41,6 +41,11 @@ export interface FetchResult {
   remaining: number;
   errors: string[];
   note?: string;
+  // Whether KSeF actually rate-limited this run. The app's auto-continue loop
+  // used to infer it from "processed fewer than 5", which is wrong both ways: a
+  // run with only 4 invoices left isn't throttled, and a throttled run that
+  // still managed 5 isn't clear.
+  rateLimited?: boolean;
 }
 
 interface SupplierRec {
@@ -371,6 +376,7 @@ export async function runKsefFetch(
           // Rate-limited: not a real error — the invoice is untouched and the
           // next run will pick it up (never-imported ones sort first anyway).
           rateLimitStreak++;
+          res.rateLimited = true;
           res.remaining++;
         } else {
           res.errors.push(`${ref.ksefReference}: ${msg}`);

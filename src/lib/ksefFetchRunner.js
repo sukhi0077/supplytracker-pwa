@@ -30,7 +30,6 @@ export async function startKsefFetch(params, { onData } = {}) {
   emit();
 
   const totals = { found: 0, created: 0, updated: 0, skipped: 0, remaining: 0, errors: [], note: "" };
-  let candidatesTotal = 0;
   try {
     for (let round = 1; round <= MAX_ROUNDS; round++) {
       state.progress = `Fetching (run ${round})…`;
@@ -40,22 +39,28 @@ export async function startKsefFetch(params, { onData } = {}) {
       totals.created += res.created ?? 0;
       totals.updated += res.updated ?? 0;
       totals.skipped = res.skipped ?? totals.skipped;
-      // "Left" across the whole session: the worker only knows about one run,
-      // so count down from the first run's candidate total ourselves.
-      if (round === 1) candidatesTotal = totals.found - (res.skipped ?? 0);
-      totals.remaining = Math.min(res.remaining ?? 0, Math.max(0, candidatesTotal - totals.created - totals.updated));
+      // The worker's own count, not session arithmetic. It skips invoices
+      // refreshed in the last half hour, so a pass genuinely reaches 0 —
+      // deriving "left" here from totals was guesswork that drifted.
+      totals.remaining = res.remaining ?? 0;
+      // Belt and braces: a session can never touch more invoices than exist.
+      // An older Worker could still loop and report more updates than found.
+      const cap = totals.found || Infinity;
+      if (totals.created + totals.updated > cap) totals.updated = Math.max(0, cap - totals.created);
       totals.errors = [...totals.errors, ...(res.errors || [])];
       totals.note = res.note || "";
       state.summary = { ...totals };
       emit();
       onData?.();
       if (!totals.remaining || state.cancel || round === MAX_ROUNDS) break;
-      // A round that processed few invoices was rate-limited — give KSeF's
-      // limit window a full minute to reset, otherwise a short breather.
-      const roundProcessed = (res.created ?? 0) + (res.updated ?? 0);
-      const waitS = roundProcessed >= 5 ? 20 : 60;
+      // Wait on the Worker's word, not on a guess. It reports whether KSeF
+      // actually throttled the run; a short round because only three invoices
+      // were left is not a reason to idle for a minute.
+      const waitS = res.rateLimited ? 60 : 15;
       for (let s = waitS; s > 0 && !state.cancel; s--) {
-        state.progress = `${totals.remaining} left — next run in ${s}s`;
+        state.progress = res.rateLimited
+          ? `KSeF rate limit — waiting ${s}s (${totals.remaining} left)`
+          : `${totals.remaining} left — next run in ${s}s`;
         emit();
         await new Promise((r) => setTimeout(r, 1000));
       }
