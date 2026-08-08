@@ -87,8 +87,8 @@ const ARROW_BASE =
 // "md" matches Btn exactly (px-3.5 py-2 text-sm) so the stepper lines up with a
 // primary button beside it; "sm" is the compact form used inside the toolbar.
 const SIZES = {
-  md: { arrow: "px-3 py-2 text-sm", label: "px-3 py-2 text-sm min-w-[104px]" },
-  sm: { arrow: "px-2 py-1 text-base", label: "px-2.5 py-1 text-xs min-w-[86px]" },
+  md: { arrow: "px-3 py-2 text-sm", label: "px-3 py-2 text-sm min-w-[104px]", pill: "px-3 py-2 text-sm" },
+  sm: { arrow: "px-2 py-1 text-base", label: "px-2.5 py-1 text-xs min-w-[86px]", pill: "px-2.5 py-1 text-xs" },
 };
 
 function MonthStepper({ range, size = "sm" }) {
@@ -145,7 +145,7 @@ export function DateRangeBar({ range, presets = true, size, className = "" }) {
         <button
           key={p.key}
           onClick={() => setPreset(p.key)}
-          className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+          className={`whitespace-nowrap rounded-full font-semibold ${(SIZES[size] || SIZES.sm).pill} ${
             preset === p.key ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-100"
           }`}
         >

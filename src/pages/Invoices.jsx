@@ -47,24 +47,26 @@ export default function Invoices({ isAdmin }) {
     <div>
       <PageHeader title="Invoices" subtitle="Supplier invoices in the shared database." />
 
-      {/* Month first, then the action — the navigator sets what you're looking
-          at, so it leads. Both are the same height (size "md" matches Btn). */}
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      {/* What you're looking at on the left, the action on the right. Both are
+          the same height — the stepper's "md" size matches Btn. */}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <DateRangeBar range={range} presets={false} />
         {isAdmin && <Btn variant="primary" onClick={openNew}>+ New invoice</Btn>}
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-slate-500">
+          {rows.length
+            ? `${rows.length} invoice${rows.length === 1 ? "" : "s"} · ${money(total)}`
+            : "Nothing in this period."}
+        </p>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search number or supplier…"
-          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 sm:ml-auto"
+          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
       </div>
-
-      <p className="mb-4 text-sm text-slate-500">
-        {rows.length
-          ? `${rows.length} invoice${rows.length === 1 ? "" : "s"} · ${money(total)}`
-          : "Nothing in this period."}
-      </p>
 
       {error ? (
         <ErrorBox error={error} />

@@ -122,27 +122,27 @@ export default function Dashboard() {
     <div>
       <PageHeader title="Dashboard" />
 
+      {/* Date control on the left at button height, matching Invoices. Tabs sit
+          on their own line below rather than competing with it for the row. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <DateRangeBar range={range} size="md" />
+      </div>
+
       <div className="mb-4 empty:mb-0"><CustomRangeFields range={range} /></div>
 
-      {/* Tabs and date presets share a row that wraps; each group scrolls
-          sideways on its own rather than pushing the page wider. Six presets
-          with word labels no longer fit beside the title. */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 pb-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${
-                tab === t.key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <DateRangeBar range={range} />
+      {/* Scrollable rather than wrapping on a narrow phone. */}
+      <div className="-mx-1 mb-4 flex max-w-full gap-1 overflow-x-auto px-1 pb-1">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold ${
+              tab === t.key ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {error ? (
