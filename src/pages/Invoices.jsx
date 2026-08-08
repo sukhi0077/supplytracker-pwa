@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useInvoices } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty, Pill } from "../components/ui/parts.jsx";
 import { Btn } from "../components/ui/form.jsx";
+import { DateRangeBar, CustomRangeFields, useDateRange } from "../components/ui/DateRangeBar.jsx";
 import InvoiceEditor from "../components/InvoiceEditor.jsx";
 import InvoiceView from "../components/InvoiceView.jsx";
 
@@ -21,15 +22,26 @@ export default function Invoices({ isAdmin }) {
   // Only manually-entered invoices (no KSeF reference) are editable.
   const isManual = (i) => !i.ksef_reference;
 
+  // Same control as the dashboard, filtering on issue_date. Comparing the ISO
+  // date strings directly is safe — they're zero-padded, so lexical order is
+  // chronological order, and it avoids re-parsing every row into a Date.
+  const range = useDateRange("month");
+
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (data || []).filter(
-      (i) =>
+    return (data || []).filter((i) => {
+      const d = i.issue_date || "";
+      if (range.from && d && d < range.from) return false;
+      if (range.to && d && d > range.to) return false;
+      return (
         !needle ||
         (i.number || "").toLowerCase().includes(needle) ||
-        (i.supplierName || "").toLowerCase().includes(needle),
-    );
-  }, [data, q]);
+        (i.supplierName || "").toLowerCase().includes(needle)
+      );
+    });
+  }, [data, q, range.from, range.to]);
+
+  const total = useMemo(() => rows.reduce((s, i) => s + Number(i.gross_total || 0), 0), [rows]);
 
   return (
     <div>
@@ -39,14 +51,22 @@ export default function Invoices({ isAdmin }) {
         right={isAdmin && <Btn variant="primary" onClick={openNew}>+ New invoice</Btn>}
       />
 
-      <div className="mb-4">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search number or supplier…"
           className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
+        <DateRangeBar range={range} />
+        {rows.length > 0 && (
+          <span className="text-xs text-slate-500">
+            {rows.length} invoice{rows.length === 1 ? "" : "s"} · {money(total)}
+          </span>
+        )}
       </div>
+
+      <div className="mb-4 empty:mb-0"><CustomRangeFields range={range} /></div>
 
       {error ? (
         <ErrorBox error={error} />
@@ -55,8 +75,9 @@ export default function Invoices({ isAdmin }) {
       ) : rows.length === 0 ? (
         <Card className="p-2">
           <Empty>
-            No invoices yet. Auto-fetch from KSeF arrives in the Workers phase; manual entry is
-            coming next.
+            {(data || []).length
+              ? "No invoices in this period — try a wider range."
+              : "No invoices yet. Fetch them from Download KSeF, or add one manually."}
           </Empty>
         </Card>
       ) : (

@@ -19,48 +19,10 @@ import {
   usePurchaseAnalytics,
 } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox } from "../components/ui/parts.jsx";
+import { DateRangeBar, CustomRangeFields, useDateRange } from "../components/ui/DateRangeBar.jsx";
 import { COLORS, Kpi, ChartCard, BarList, money0, money2, monthLabel } from "../components/dashboard/common.jsx";
 import CategoriesTab from "../components/dashboard/CategoriesTab.jsx";
 import ItemAnalysisTab from "../components/dashboard/ItemAnalysisTab.jsx";
-
-// Local calendar date, NOT toISOString().slice(0,10). toISOString converts to
-// UTC first, so in Poland (UTC+1/+2) the 1st of the month at 00:00 local came
-// back as the last day of the PREVIOUS month — which would have quietly broken
-// the month presets below, and already made "today" wrong before ~01:00/02:00.
-const iso = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-// `anchor` is { y, m } — the month the navigator is pointing at.
-function rangeFor(preset, anchor) {
-  const now = new Date();
-  const to = iso(now);
-  const y = now.getFullYear();
-  const m = now.getMonth();
-
-  if (preset === "month") {
-    const a = anchor || { y, m };
-    const isCurrent = a.y === y && a.m === m;
-    return {
-      from: iso(new Date(a.y, a.m, 1)),
-      // Day 0 of the next month is the last day of this one. The current month
-      // stops at today rather than running into the future.
-      to: isCurrent ? to : iso(new Date(a.y, a.m + 1, 0)),
-    };
-  }
-  if (preset === "ytd") return { from: `${y}-01-01`, to };
-  const n = { "3m": 3, "6m": 6 }[preset] ?? 3;
-  return { from: iso(new Date(y, m - n, now.getDate())), to };
-}
-
-const PRESETS = [
-  { key: "3m", label: "3M" },
-  { key: "6m", label: "6M" },
-  { key: "ytd", label: "YTD" },
-  { key: "custom", label: "Custom" },
-];
-
-const monthName = (a) =>
-  new Date(a.y, a.m, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -69,38 +31,9 @@ const TABS = [
 ];
 
 export default function Dashboard() {
-  const [preset, setPreset] = useState("month");
   const [tab, setTab] = useState("overview");
-  // Custom range seeds from the last 12 months so the inputs open on something
-  // sensible rather than empty.
-  const [customFrom, setCustomFrom] = useState(() => rangeFor("3m").from);
-  const [customTo, setCustomTo] = useState(() => iso(new Date()));
-  const [anchor, setAnchor] = useState(() => {
-    const d = new Date();
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
-
-  // Can't step past the current month — there's nothing there.
-  const nowRef = new Date();
-  const atCurrentMonth = anchor.y === nowRef.getFullYear() && anchor.m === nowRef.getMonth();
-  const stepMonth = (delta) => {
-    setPreset("month");
-    setAnchor((a) => {
-      const d = new Date(a.y, a.m + delta, 1);
-      const n = new Date();
-      if (d > new Date(n.getFullYear(), n.getMonth(), 1)) return a;
-      return { y: d.getFullYear(), m: d.getMonth() };
-    });
-  };
-
-  const { from, to } = useMemo(() => {
-    if (preset !== "custom") return rangeFor(preset, anchor);
-    // Tolerate the dates being entered the wrong way round.
-    const a = customFrom || undefined;
-    const b = customTo || undefined;
-    if (a && b && a > b) return { from: b, to: a };
-    return { from: a, to: b };
-  }, [preset, customFrom, customTo, anchor]);
+  const range = useDateRange("month");
+  const { from, to } = range;
 
   const analytics = usePurchaseAnalytics(from, to);
   const items = useItems();
@@ -189,31 +122,7 @@ export default function Dashboard() {
     <div>
       <PageHeader title="Dashboard" />
 
-      {preset === "custom" && (
-        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-600">From</span>
-            <input
-              type="date"
-              value={customFrom || ""}
-              max={customTo || undefined}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-600">To</span>
-            <input
-              type="date"
-              value={customTo || ""}
-              min={customFrom || undefined}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-            />
-          </label>
-          <span className="pb-2 text-xs text-slate-400">applies to every tab</span>
-        </div>
-      )}
+      <div className="mb-4 empty:mb-0"><CustomRangeFields range={range} /></div>
 
       {/* Tabs and date presets share a row that wraps; each group scrolls
           sideways on its own rather than pushing the page wider. Six presets
@@ -233,49 +142,7 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* One toolbar: month stepper, divider, preset pills — all the same
-            height inside a single border, so it reads as one control rather
-            than two clusters of loose buttons. */}
-        <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-300 bg-white px-1.5 py-1">
-          <button
-            onClick={() => stepMonth(-1)}
-            aria-label="Previous month"
-            className="rounded-md px-2 py-1 text-base leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-          >
-            ‹
-          </button>
-          <button
-            onClick={() => setPreset("month")}
-            title="Show this month"
-            className={`min-w-[82px] whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ${
-              preset === "month" ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"
-            }`}
-          >
-            {monthName(anchor)}
-          </button>
-          <button
-            onClick={() => stepMonth(1)}
-            disabled={atCurrentMonth}
-            aria-label="Next month"
-            className="rounded-md px-2 py-1 text-base leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"
-          >
-            ›
-          </button>
-
-          <span className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
-
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setPreset(p.key)}
-              className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
-                preset === p.key ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <DateRangeBar range={range} />
       </div>
 
       {error ? (
