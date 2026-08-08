@@ -26,6 +26,8 @@ import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/par
 import Modal from "../components/ui/Modal.jsx";
 import ItemPicker from "../components/ui/ItemPicker.jsx";
 import { Field, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
+import { SortTh } from "../components/SortTh.jsx";
+import { useSort } from "../hooks/useSort.js";
 
 // Money is 2dp; quantities and pack sizes keep their own precision.
 const FMT = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
@@ -157,6 +159,9 @@ export default function InvoiceDetails({ isAdmin }) {
         r.supplierName.toLowerCase().includes(n),
     );
   }, [data, q]);
+
+  // Newest first, matching the order the query returns.
+  const { sorted, sort } = useSort(rows, { key: "issueDate", dir: "desc" });
 
   // Real total from the DB. Counting the loaded rows gave a different answer
   // depending on the filter, because getLines() only returns 300 of them.
@@ -385,18 +390,18 @@ export default function InvoiceDetails({ isAdmin }) {
               </colgroup>
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-3 font-semibold">Date</th>
-                  <th className="px-3 py-3 font-semibold">Invoice</th>
-                  <th className="px-3 py-3 font-semibold">Supplier</th>
-                  <th className="px-3 py-3 font-semibold">KSeF line text</th>
-                  <th className="px-3 py-3 text-right font-semibold">Qty</th>
-                  <th className="px-3 py-3 text-right font-semibold">Net</th>
-                  <th className="px-3 py-3 text-right font-semibold">Gross</th>
-                  <th className="px-3 py-3 font-semibold">Mapped item</th>
+                  <SortTh label="Date" field="issueDate" sort={sort} className="px-3 py-3" />
+                  <SortTh label="Invoice" field="invoiceNumber" sort={sort} className="px-3 py-3" />
+                  <SortTh label="Supplier" field="supplierName" sort={sort} className="px-3 py-3" />
+                  <SortTh label="KSeF line text" field="ksefItemName" sort={sort} className="px-3 py-3" />
+                  <SortTh label="Qty" field="quantity" sort={sort} align="right" className="px-3 py-3" />
+                  <SortTh label="Net" field="netTotal" sort={sort} align="right" className="px-3 py-3" />
+                  <SortTh label="Gross" field="grossTotal" sort={sort} align="right" className="px-3 py-3" />
+                  <SortTh label="Mapped item" field="itemName" sort={sort} className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr key={r.id} className={r.itemId ? "" : "bg-amber-50/40"}>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-slate-500">{r.issueDate}</td>
                     <td className="px-3 py-2 align-top">
@@ -424,7 +429,7 @@ export default function InvoiceDetails({ isAdmin }) {
 
           {/* Mobile: stacked cards */}
           <div className="space-y-2 md:hidden">
-            {rows.map((r) => (
+            {sorted.map((r) => (
               <div
                 key={r.id}
                 className={`rounded-xl border p-3 ${r.itemId ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50/50"}`}

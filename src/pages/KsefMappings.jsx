@@ -234,7 +234,7 @@ export default function KsefMappings({ isAdmin }) {
                   <SortTh label="Item" field="itemName" sort={sort} className="px-4 py-3" />
                   <SortTh label="KSeF text" field="ksefItemName" sort={sort} className="px-4 py-3" />
                   <SortTh label="Supplier" field="supplierName" sort={sort} className="px-4 py-3" />
-                  <SortTh label="Pack" field="packSize" sort={sort} className="px-4 py-3" />
+                  <SortTh label="Pack" field="packSize" sort={sort} align="right" className="px-4 py-3" />
                   {isAdmin && <th className="px-4 py-3" />}
                 </tr>
               </thead>
@@ -252,7 +252,7 @@ export default function KsefMappings({ isAdmin }) {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-500">{m.supplierName || <span className="text-slate-400">(any)</span>}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{m.packSize}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-600">{m.packSize}</td>
                     {isAdmin && (
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <button onClick={() => { setEditing(m); setOpen(true); }} className="mr-1 rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50">Edit</button>

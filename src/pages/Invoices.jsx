@@ -4,6 +4,8 @@ import { useInvoices } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty, Pill } from "../components/ui/parts.jsx";
 import { Btn } from "../components/ui/form.jsx";
 import { DateRangeBar, useDateRange } from "../components/ui/DateRangeBar.jsx";
+import { SortTh } from "../components/SortTh.jsx";
+import { useSort } from "../hooks/useSort.js";
 import InvoiceEditor from "../components/InvoiceEditor.jsx";
 import InvoiceView from "../components/InvoiceView.jsx";
 
@@ -42,6 +44,9 @@ export default function Invoices({ isAdmin }) {
   }, [data, q, range.from, range.to]);
 
   const total = useMemo(() => rows.reduce((s, i) => s + Number(i.gross_total || 0), 0), [rows]);
+
+  // Newest first by default, matching the order the query already returns.
+  const { sorted, sort } = useSort(rows, { key: "issue_date", dir: "desc" });
 
   return (
     <div>
@@ -86,17 +91,17 @@ export default function Invoices({ isAdmin }) {
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Number</th>
-                  <th className="px-4 py-3 font-semibold">Supplier</th>
-                  <th className="px-4 py-3 font-semibold">Issued</th>
-                  <th className="px-4 py-3 font-semibold text-right">Net</th>
-                  <th className="px-4 py-3 font-semibold text-right">Gross</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <SortTh label="Number" field="number" sort={sort} className="px-4 py-3" />
+                  <SortTh label="Supplier" field="supplierName" sort={sort} className="px-4 py-3" />
+                  <SortTh label="Issued" field="issue_date" sort={sort} className="px-4 py-3" />
+                  <SortTh label="Net" field="net_total" sort={sort} align="right" className="px-4 py-3" />
+                  <SortTh label="Gross" field="gross_total" sort={sort} align="right" className="px-4 py-3" />
+                  <SortTh label="Status" field="status" sort={sort} className="px-4 py-3" />
                   {isAdmin && <th className="px-4 py-3" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((i) => (
+                {sorted.map((i) => (
                   <tr
                     key={i.id}
                     onClick={() => setViewId(i.id)}
