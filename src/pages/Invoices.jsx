@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useInvoices } from "../hooks/useCatalogue.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty, Pill } from "../components/ui/parts.jsx";
 import { Btn } from "../components/ui/form.jsx";
-import { DateRangeBar, CustomRangeFields, useDateRange } from "../components/ui/DateRangeBar.jsx";
+import { DateRangeBar, useDateRange } from "../components/ui/DateRangeBar.jsx";
 import InvoiceEditor from "../components/InvoiceEditor.jsx";
 import InvoiceView from "../components/InvoiceView.jsx";
 
@@ -58,7 +58,7 @@ export default function Invoices({ isAdmin }) {
           placeholder="Search number or supplier…"
           className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
-        <DateRangeBar range={range} />
+        <DateRangeBar range={range} presets={false} />
         {rows.length > 0 && (
           <span className="text-xs text-slate-500">
             {rows.length} invoice{rows.length === 1 ? "" : "s"} · {money(total)}
@@ -66,7 +66,6 @@ export default function Invoices({ isAdmin }) {
         )}
       </div>
 
-      <div className="mb-4 empty:mb-0"><CustomRangeFields range={range} /></div>
 
       {error ? (
         <ErrorBox error={error} />

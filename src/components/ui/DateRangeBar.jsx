@@ -77,39 +77,50 @@ export function useDateRange(initialPreset = "month") {
   };
 }
 
-// Arrows, month, divider, preset pills — one border, one height. Only the
-// active choice is filled; the rest highlight on hover, so it reads as a single
-// control rather than a row of outlined boxes.
-export function DateRangeBar({ range, className = "" }) {
+// Arrows are their own outlined buttons with a gap either side of the month —
+// they're a different kind of action (step) from the label (select), and butted
+// together they read as one wide button.
+const ARROW =
+  "rounded-md border border-slate-300 bg-white px-2 py-1 text-base leading-none text-slate-500 " +
+  "hover:bg-slate-50 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-white";
+
+function MonthStepper({ range }) {
   const { preset, setPreset, anchor, stepMonth, atCurrentMonth } = range;
   return (
-    <div
-      className={`flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-300 bg-white px-1.5 py-1 ${className}`}
-    >
-      <button
-        onClick={() => stepMonth(-1)}
-        aria-label="Previous month"
-        className="rounded-md px-2 py-1 text-base leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-      >
+    <>
+      <button onClick={() => stepMonth(-1)} aria-label="Previous month" className={ARROW}>
         ‹
       </button>
       <button
         onClick={() => setPreset("month")}
         title="Show this month"
-        className={`min-w-[82px] whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ${
+        className={`min-w-[86px] whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${
           preset === "month" ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"
         }`}
       >
         {monthName(anchor)}
       </button>
-      <button
-        onClick={() => stepMonth(1)}
-        disabled={atCurrentMonth}
-        aria-label="Next month"
-        className="rounded-md px-2 py-1 text-base leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"
-      >
+      <button onClick={() => stepMonth(1)} disabled={atCurrentMonth} aria-label="Next month" className={ARROW}>
         ›
       </button>
+    </>
+  );
+}
+
+// With presets: one bordered toolbar. Without them (`presets={false}`), just the
+// stepper — no outer box for three controls to sit in.
+export function DateRangeBar({ range, presets = true, className = "" }) {
+  const { preset, setPreset } = range;
+
+  if (!presets) {
+    return <div className={`flex items-center gap-1.5 ${className}`}><MonthStepper range={range} /></div>;
+  }
+
+  return (
+    <div
+      className={`flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-1.5 py-1 ${className}`}
+    >
+      <MonthStepper range={range} />
 
       <span className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
 
