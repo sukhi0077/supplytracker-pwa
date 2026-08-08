@@ -24,6 +24,13 @@ const PACE_MS = 1500;
 // invoices are reported as "left" and picked up by the next run.
 const RATE_LIMIT_GIVE_UP = 2;
 
+// An existing invoice refreshed this recently is treated as current and not
+// re-fetched. This is what lets a capped, repeating run terminate: without it,
+// refreshing the stalest rows just makes them the freshest and the pass loops
+// forever. Longer than a full auto-continue session, shorter than a day, so the
+// nightly cron still refreshes everything in its window.
+const RECENTLY_REFRESHED_MS = 30 * 60 * 1000;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface FetchResult {
@@ -239,10 +246,20 @@ export async function runKsefFetch(
     const mappings = await loadMappings(db);
     const writeStock = String(env.KSEF_WRITE_STOCK).toLowerCase() === "true";
 
-    // Candidates = new invoices, or all when re-importing.
-    const candidates = refs.filter(
-      (r) => opts.updateExisting || !existingMap.has(r.ksefReference),
-    );
+    // Candidates = new invoices, or all when re-importing — except an existing
+    // invoice refreshed in the last few minutes, which is already current.
+    //
+    // Without this the auto-continue loop never finished: each run refreshes
+    // the 6 stalest, which makes them the freshest, so the next run picks the
+    // next 6 and after a full pass it wraps around and starts again. That's how
+    // 40 invoices reported "42 updated" — more updates than invoices.
+    const now = Date.now();
+    const candidates = refs.filter((r) => {
+      const existingId = existingMap.get(r.ksefReference);
+      if (!existingId) return true; // new — always a candidate
+      if (!opts.updateExisting) return false;
+      return now - (staleness.get(r.ksefReference) || 0) > RECENTLY_REFRESHED_MS;
+    });
     // Already-imported invoices we're not updating cost nothing here.
     res.skipped = refs.length - candidates.length;
 
@@ -361,14 +378,19 @@ export async function runKsefFetch(
       }
     }
 
+    // The note describes THIS run only; the app's auto-continue loop shows the
+    // session totals. Saying "refreshed 6" beside a running total of 42 read
+    // like a contradiction, so it now says which run it is talking about.
     const note =
       res.remaining > 0
         ? rateLimitStreak >= RATE_LIMIT_GIVE_UP
           ? `KSeF rate limit hit — ${res.remaining} left.`
           : opts.updateExisting && res.created === 0
-            ? `All ${res.found} already imported — refreshed ${res.updated}; untick "Update existing" for new only.`
+            ? `Nothing new — this run refreshed ${res.updated} of ${res.found}, ${res.remaining} still to refresh.`
             : `${res.remaining} left (per-run cap).`
-        : "";
+        : opts.updateExisting && res.created === 0 && res.updated === 0
+          ? `All ${res.found} are already up to date.`
+          : "";
     res.note = note;
     await finish(res.errors.length ? "partial" : "success", note);
   } catch (e) {
