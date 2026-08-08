@@ -233,52 +233,43 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="-mx-1 flex max-w-full items-center gap-1 overflow-x-auto px-1 pb-1">
-          {/* Month navigator — replaces the This month / Last month buttons,
-              so any month is two clicks away instead of only the last two. */}
-          <div
-            className={`flex items-center overflow-hidden rounded-md border ${
-              preset === "month" ? "border-teal-600" : "border-slate-300"
+        {/* One toolbar: month stepper, divider, preset pills — all the same
+            height inside a single border, so it reads as one control rather
+            than two clusters of loose buttons. */}
+        <div className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-300 bg-white px-1.5 py-1">
+          <button
+            onClick={() => stepMonth(-1)}
+            aria-label="Previous month"
+            className="rounded-md px-2 py-1 text-base leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          >
+            ‹
+          </button>
+          <button
+            onClick={() => setPreset("month")}
+            title="Show this month"
+            className={`min-w-[82px] whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ${
+              preset === "month" ? "bg-teal-600 text-white" : "text-slate-700 hover:bg-slate-100"
             }`}
           >
-            <button
-              onClick={() => stepMonth(-1)}
-              aria-label="Previous month"
-              className={`px-2 py-1.5 text-sm ${
-                preset === "month" ? "bg-teal-600 text-white hover:bg-teal-700" : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              ‹
-            </button>
-            <button
-              onClick={() => setPreset("month")}
-              title="Show this month"
-              className={`min-w-[86px] whitespace-nowrap px-2 py-1.5 text-xs font-semibold ${
-                preset === "month" ? "bg-teal-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {monthName(anchor)}
-            </button>
-            <button
-              onClick={() => stepMonth(1)}
-              disabled={atCurrentMonth}
-              aria-label="Next month"
-              className={`px-2 py-1.5 text-sm disabled:opacity-40 ${
-                preset === "month" ? "bg-teal-600 text-white hover:bg-teal-700" : "bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              ›
-            </button>
-          </div>
+            {monthName(anchor)}
+          </button>
+          <button
+            onClick={() => stepMonth(1)}
+            disabled={atCurrentMonth}
+            aria-label="Next month"
+            className="rounded-md px-2 py-1 text-base leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            ›
+          </button>
+
+          <span className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
 
           {PRESETS.map((p) => (
             <button
               key={p.key}
               onClick={() => setPreset(p.key)}
-              className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs font-semibold ${
-                preset === p.key
-                  ? "border-teal-600 bg-teal-600 text-white"
-                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+              className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+                preset === p.key ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               {p.label}
