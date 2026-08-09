@@ -63,9 +63,13 @@ export default function Dashboard() {
     return m;
   }, [items.data, master.data]);
 
+  // Same enrichment as itemMap, so the item picker can show the classification.
   const itemOptions = useMemo(
-    () => (items.data || []).slice().sort((a, b) => a.name.localeCompare(b.name)),
-    [items.data],
+    () =>
+      (items.data || [])
+        .map((i) => ({ ...i, ...(itemMap.get(i.id) || {}) }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [items.data, itemMap],
   );
 
   const lines = analytics.data?.lines || [];

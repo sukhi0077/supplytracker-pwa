@@ -146,10 +146,21 @@ export default function InvoiceDetails({ isAdmin }) {
     return () => { alive = false; };
   }, [pending?.row?.invoiceId]);
 
-  const itemOptions = useMemo(
-    () => (items || []).filter((i) => i.isActive).sort((a, b) => a.name.localeCompare(b.name)),
-    [items],
-  );
+  // useItems() returns blank category/sub-category strings — they're FK ids on
+  // the row — so the picker gets them resolved from master data here.
+  const itemOptions = useMemo(() => {
+    const catName = new Map((master?.categories || []).map((c) => [c.id, c.name]));
+    const subName = new Map((master?.subCategories || []).map((s) => [s.id, s.name]));
+    return (items || [])
+      .filter((i) => i.isActive)
+      .map((i) => ({
+        ...i,
+        category: (i.categoryId && catName.get(i.categoryId)) || "",
+        subCategory: (i.subCategoryId && subName.get(i.subCategoryId)) || "",
+        unit: (i.unitId && unitCodeById.get(i.unitId)) || "",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, master, unitCodeById]);
 
   const suggest = useMemo(() => {
     if (!items) return null;

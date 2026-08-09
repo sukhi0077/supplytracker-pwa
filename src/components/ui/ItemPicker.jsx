@@ -39,12 +39,13 @@ export default function ItemPicker({
     if (!isTouch) setTimeout(() => searchRef.current?.focus(), 30);
   }, [open]);
 
-  // Match every whitespace-separated term, in any order, against name + code.
+  // Match every whitespace-separated term, in any order, against name, code and
+  // classification — so "cebula warzywa" finds it by category too.
   const filtered = useMemo(() => {
     const terms = norm(q).split(/\s+/).filter(Boolean);
     if (!terms.length) return options;
     return options.filter((o) => {
-      const hay = `${norm(o.name)} ${norm(o.code)}`;
+      const hay = `${norm(o.name)} ${norm(o.code)} ${norm(o.category)} ${norm(o.subCategory)}`;
       return terms.every((t) => hay.includes(t));
     });
   }, [q, options]);
@@ -100,12 +101,23 @@ export default function ItemPicker({
                 key={o.id}
                 type="button"
                 onClick={() => pick(o.id)}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-slate-50 ${
+                className={`flex w-full items-start justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-slate-50 ${
                   o.id === value ? "bg-teal-50 font-semibold text-teal-800" : "text-slate-700"
                 }`}
               >
-                <span className="min-w-0 break-words">{o.name}</span>
-                {o.code ? <span className="shrink-0 text-xs text-slate-400">{o.code}</span> : null}
+                <span className="min-w-0">
+                  <span className="block break-words">{o.name}</span>
+                  {/* Two items can have near-identical names in different
+                      categories — the classification is what tells them apart. */}
+                  {(o.category || o.subCategory) && (
+                    <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                      {o.category || "Uncategorised"}
+                      {o.subCategory ? ` › ${o.subCategory}` : ""}
+                      {o.unit ? ` · ${o.unit}` : ""}
+                    </span>
+                  )}
+                </span>
+                {o.code ? <span className="shrink-0 font-mono text-xs text-slate-400">{o.code}</span> : null}
               </button>
             ))
           )}
