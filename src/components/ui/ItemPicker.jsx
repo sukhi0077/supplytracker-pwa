@@ -23,6 +23,8 @@ export default function ItemPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [cat, setCat] = useState("");
+  const [sub, setSub] = useState("");
   const searchRef = useRef(null);
 
   const selected = useMemo(
@@ -33,22 +35,37 @@ export default function ItemPicker({
   useEffect(() => {
     if (!open) return;
     setQ("");
+    setCat("");
+    setSub("");
     // Desktop gets an autofocused search box; on touch we skip it so the
     // keyboard doesn't cover the list before you've seen it.
     const isTouch = window.matchMedia?.("(hover: none)").matches;
     if (!isTouch) setTimeout(() => searchRef.current?.focus(), 30);
   }, [open]);
 
+  const categories = useMemo(
+    () => [...new Set(options.map((o) => o.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [options],
+  );
+  // Sub-categories narrow to the chosen category — the same sub-category name
+  // can exist under several categories, and listing them all is noise.
+  const subCategories = useMemo(() => {
+    const pool = cat ? options.filter((o) => o.category === cat) : options;
+    return [...new Set(pool.map((o) => o.subCategory).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }, [options, cat]);
+
   // Match every whitespace-separated term, in any order, against name, code and
   // classification — so "cebula warzywa" finds it by category too.
   const filtered = useMemo(() => {
     const terms = norm(q).split(/\s+/).filter(Boolean);
-    if (!terms.length) return options;
     return options.filter((o) => {
+      if (cat && o.category !== cat) return false;
+      if (sub && o.subCategory !== sub) return false;
+      if (!terms.length) return true;
       const hay = `${norm(o.name)} ${norm(o.code)} ${norm(o.category)} ${norm(o.subCategory)}`;
       return terms.every((t) => hay.includes(t));
     });
-  }, [q, options]);
+  }, [q, options, cat, sub]);
 
   const pick = (id) => {
     setOpen(false);
@@ -80,6 +97,45 @@ export default function ItemPicker({
             placeholder="Search items…"
             className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 sm:text-sm"
           />
+
+          {categories.length > 1 && (
+            <div className="mt-2 flex gap-2">
+              <select
+                value={cat}
+                onChange={(e) => { setCat(e.target.value); setSub(""); }}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              >
+                <option value="">All categories</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <select
+                value={sub}
+                onChange={(e) => setSub(e.target.value)}
+                disabled={!subCategories.length}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">All sub-categories</option>
+                {subCategories.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(cat || sub || q) && (
+            <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+              <span>{filtered.length} of {options.length} items</span>
+              <button
+                type="button"
+                onClick={() => { setQ(""); setCat(""); setSub(""); }}
+                className="font-semibold text-teal-600 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="-mx-1 mt-2">
@@ -94,7 +150,10 @@ export default function ItemPicker({
           </button>
 
           {filtered.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-slate-400">No items match “{q}”.</p>
+            <p className="px-3 py-6 text-center text-sm text-slate-400">
+              {q ? `No items match “${q}”` : "No items"}
+              {cat || sub ? " in this category." : "."}
+            </p>
           ) : (
             filtered.slice(0, MAX_RENDERED).map((o) => (
               <button
