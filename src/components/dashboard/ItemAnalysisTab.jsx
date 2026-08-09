@@ -13,7 +13,12 @@ import {
   ResponsiveContainer, LineChart, Line, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, BarChart,
 } from "recharts";
+import { useMappings, useRemoveMapping, useSetLineItem } from "../../hooks/useCatalogue.js";
+import { CATCH_ALL } from "../../repositories/KsefMappingRepository.js";
+import { normalizeKsefName } from "../../utils/ksefMatch.js";
 import { Card, Empty } from "../ui/parts.jsx";
+import Modal from "../ui/Modal.jsx";
+import { Btn } from "../ui/form.jsx";
 import ItemPicker from "../ui/ItemPicker.jsx";
 import InvoiceView from "../InvoiceView.jsx";
 import ItemTrendTable from "./ItemTrendTable.jsx";
@@ -50,6 +55,44 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
   // usually needs the rest of the invoice for context.
   const [viewInvoiceId, setViewInvoiceId] = useState(null);
   const detailRef = useRef(null);
+
+  // Removing a mapping from a purchase row. Two separate things can be undone:
+  // the item on THIS invoice line, and the KSeF mapping rule that will re-apply
+  // it on the next fetch. Undoing only the line looks fixed until the next run.
+  const { data: mappings } = useMappings();
+  const removeMapping = useRemoveMapping();
+  const clearLineItem = useSetLineItem();
+  const [removing, setRemoving] = useState(null); // { row, line, rule, err }
+
+  // The mapping rule that produced this line, by the Worker's precedence.
+  const ruleFor = useCallback(
+    (row) => {
+      const key = normalizeKsefName(row.ksefName || "");
+      const list = mappings || [];
+      return (
+        (key && list.find((m) => m.supplierId === row.supplierId && normalizeKsefName(m.ksefItemName) === key)) ||
+        (key && list.find((m) => !m.supplierId && normalizeKsefName(m.ksefItemName) === key)) ||
+        list.find((m) => m.supplierId === row.supplierId && String(m.ksefItemName).trim() === CATCH_ALL) ||
+        null
+      );
+    },
+    [mappings],
+  );
+
+  const askRemove = (row) => setRemoving({ row, line: true, rule: false, err: "" });
+
+  const confirmRemove = async () => {
+    if (!removing) return;
+    const { row, line, rule } = removing;
+    const found = ruleFor(row);
+    try {
+      if (line) await clearLineItem.mutateAsync({ lineId: row.id, itemId: null });
+      if (rule && found) await removeMapping.mutateAsync(found.id);
+      setRemoving(null);
+    } catch (e) {
+      setRemoving({ ...removing, err: e.message || "Could not remove." });
+    }
+  };
 
   // Picking a row in the table above should carry you down to the detail —
   // otherwise the page looks like nothing happened.
@@ -395,7 +438,8 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                     <th className="py-2 pr-3 text-right font-semibold">Pack</th>
                     <th className="py-2 pr-3 text-right font-semibold">Unit price</th>
                     <th className="py-2 pr-3 text-right font-semibold">Per {baseUnit}</th>
-                    <th className="py-2 text-right font-semibold">Net</th>
+                    <th className="py-2 pr-3 text-right font-semibold">Net</th>
+                    <th className="py-2 text-right font-semibold" />
                   </tr>
                 </thead>
                 <tbody>
@@ -424,7 +468,17 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
                         )}
                       </td>
                       <td className="py-1.5 pr-3 text-right font-medium tabular-nums text-slate-800">{moneyUnit(r.netPerBase)}</td>
-                      <td className="py-1.5 text-right tabular-nums text-slate-600">{money2(r.net)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">{money2(r.net)}</td>
+                      <td className="py-1.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => askRemove(r)}
+                          title="Remove this mapping"
+                          className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                        >
+                          Unmap
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -433,6 +487,93 @@ export default function ItemAnalysisTab({ lines, invoiceById, itemMap, itemOptio
           </ChartCard>
         </>
       )}
+
+      {/* Confirm before removing — both actions are destructive and the second
+          one affects every future fetch, not just this line. */}
+      <Modal
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        title="Remove mapping"
+        footer={
+          <>
+            <Btn onClick={() => setRemoving(null)}>Cancel</Btn>
+            <Btn
+              variant="danger"
+              onClick={confirmRemove}
+              disabled={!removing?.line && !removing?.rule}
+            >
+              {clearLineItem.isPending || removeMapping.isPending ? "Removing…" : "Remove"}
+            </Btn>
+          </>
+        }
+      >
+        {removing && (() => {
+          const rule = ruleFor(removing.row);
+          const isCatchAllRule = rule && String(rule.ksefItemName).trim() === CATCH_ALL;
+          return (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm">
+                <div className="text-[11px] uppercase tracking-wide text-slate-400">Invoice line</div>
+                <div className="break-words font-medium text-slate-800">{removing.row.ksefName || "—"}</div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  {removing.row.invoiceNumber} · {removing.row.date} · {removing.row.supplierName}
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={removing.line}
+                  onChange={(e) => setRemoving({ ...removing, line: e.target.checked })}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span className="min-w-0">
+                  Unmap this invoice line
+                  <span className="mt-0.5 block text-[11px] text-slate-400">
+                    The line stays on the invoice; it just stops counting towards this item.
+                  </span>
+                </span>
+              </label>
+
+              <label
+                className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm ${
+                  rule ? "border-slate-200 text-slate-700" : "border-slate-100 text-slate-400"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  disabled={!rule}
+                  checked={removing.rule && !!rule}
+                  onChange={(e) => setRemoving({ ...removing, rule: e.target.checked })}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span className="min-w-0">
+                  {rule ? "Also delete the KSeF mapping rule" : "No KSeF mapping rule matches this line"}
+                  <span className="mt-0.5 block text-[11px] text-slate-400">
+                    {rule ? (
+                      <>
+                        {isCatchAllRule
+                          ? `Catch-all: every line from ${rule.supplierName || "this supplier"} → ${rule.itemName}.`
+                          : `“${rule.ksefItemName}” → ${rule.itemName}${rule.supplierName ? ` (${rule.supplierName})` : " (any supplier)"}.`}{" "}
+                        Without this, the next fetch maps it straight back.
+                        {isCatchAllRule && " This rule covers other lines too."}
+                      </>
+                    ) : (
+                      "It was probably mapped by hand, so nothing will re-apply it."
+                    )}
+                  </span>
+                </span>
+              </label>
+
+              {removing.err && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {removing.err}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Modal>
 
       <InvoiceView
         open={!!viewInvoiceId}
