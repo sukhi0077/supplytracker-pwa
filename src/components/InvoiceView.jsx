@@ -60,12 +60,13 @@ export default function InvoiceView({
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2 font-semibold">#</th>
-                  <th className="px-3 py-2 font-semibold">Item / line</th>
+                  <th className="px-3 py-2 font-semibold">Item</th>
                   <th className="px-3 py-2 font-semibold text-right">Qty</th>
                   <th className="px-3 py-2 font-semibold text-right">Net/unit</th>
                   <th className="px-3 py-2 font-semibold text-right">Net</th>
                   <th className="px-3 py-2 font-semibold text-right">VAT%</th>
                   <th className="px-3 py-2 font-semibold text-right">Gross</th>
+                  <th className="px-3 py-2 font-semibold">KSeF name</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -80,12 +81,19 @@ export default function InvoiceView({
                     }
                   >
                     <td className="px-3 py-2 text-slate-400">{l.line_no}</td>
-                    <td className="px-3 py-2">{l.item?.name || l.ksef_item_name_raw}</td>
+                    {/* An unmapped line reads as "—" rather than falling back to
+                        the KSeF text, which made it look mapped to a catalogue
+                        item that doesn't exist. The raw text has its own column
+                        now, so nothing is lost. */}
+                    <td className="px-3 py-2">
+                      {l.item?.name || <span className="text-slate-400">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-right">{num(l.quantity)} {l.unit}</td>
                     <td className="px-3 py-2 text-right">{money(l.net_unit)}</td>
                     <td className="px-3 py-2 text-right">{money(l.net_total)}</td>
                     <td className="px-3 py-2 text-right">{l.vat_rate ?? ""}</td>
                     <td className="px-3 py-2 text-right font-medium">{money(l.gross_total)}</td>
+                    <td className="px-3 py-2 text-slate-500">{l.ksef_item_name_raw || "—"}</td>
                   </tr>
                 ))}
               </tbody>
