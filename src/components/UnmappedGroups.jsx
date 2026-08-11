@@ -12,6 +12,7 @@
 import { useMemo, useState } from "react";
 import { normalizeKsefName } from "../utils/ksefMatch.js";
 import ItemPicker from "./ui/ItemPicker.jsx";
+import CopyButton from "./ui/CopyButton.jsx";
 import { Empty } from "./ui/parts.jsx";
 
 const money = (v) => (v == null ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -107,7 +108,14 @@ export default function UnmappedGroups({ lines, itemOptions, suggest, onPick, is
             <div key={g.key} className="rounded-xl border border-amber-200 bg-amber-50/40 p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="break-words text-sm font-medium text-slate-800">{g.ksefItemName || "(blank)"}</div>
+                  <div className="flex items-start gap-2">
+                    <span className="min-w-0 break-words text-sm font-medium text-slate-800">
+                      {g.ksefItemName || "(blank)"}
+                    </span>
+                    {/* Copy the supplier's wording — it's the starting point for
+                        a new catalogue item, or for searching the picker. */}
+                    <CopyButton text={g.ksefItemName} />
+                  </div>
                   <div className="mt-0.5 text-[11px] text-slate-500">
                     {g.supplierName || "—"} · {g.firstDate}
                     {g.lastDate !== g.firstDate ? ` → ${g.lastDate}` : ""}

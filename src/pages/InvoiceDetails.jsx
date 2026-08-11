@@ -25,6 +25,7 @@ import { buildSuggester, normalizeKsefName } from "../utils/ksefMatch.js";
 import { PageHeader, Card, Loading, ErrorBox, Empty } from "../components/ui/parts.jsx";
 import Modal from "../components/ui/Modal.jsx";
 import ItemPicker from "../components/ui/ItemPicker.jsx";
+import CopyButton from "../components/ui/CopyButton.jsx";
 import { Field, Btn, Decimal, parseDecimal } from "../components/ui/form.jsx";
 import { SortTh } from "../components/SortTh.jsx";
 import { useSort } from "../hooks/useSort.js";
@@ -436,7 +437,14 @@ export default function InvoiceDetails({ isAdmin }) {
                       </button>
                     </td>
                     <td className="px-3 py-2 align-top text-slate-600"><span className="block truncate" title={r.supplierName}>{r.supplierName}</span></td>
-                    <td className="break-words px-3 py-2 align-top text-slate-800">{r.ksefItemName}</td>
+                    <td className="px-3 py-2 align-top text-slate-800">
+                      <div className="flex items-start gap-2">
+                        <span className="min-w-0 break-words">{r.ksefItemName}</span>
+                        {/* Only on unmapped lines — on mapped ones the wording
+                            is settled and the button would just be clutter. */}
+                        {!r.itemId && <CopyButton text={r.ksefItemName} />}
+                      </div>
+                    </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right align-top text-slate-600">{num(r.quantity)} {r.unit}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right align-top text-slate-600">{money(r.netTotal)}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right align-top font-medium text-slate-800">{money(r.grossTotal)}</td>
@@ -466,7 +474,10 @@ export default function InvoiceDetails({ isAdmin }) {
                   <span className="whitespace-nowrap">{r.issueDate}</span>
                   <span className="truncate text-right">{r.supplierName}</span>
                 </div>
-                <div className="mt-1 break-words text-sm font-medium text-slate-800">{r.ksefItemName}</div>
+                <div className="mt-1 flex items-start gap-2">
+                  <span className="min-w-0 break-words text-sm font-medium text-slate-800">{r.ksefItemName}</span>
+                  {!r.itemId && <CopyButton text={r.ksefItemName} />}
+                </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
                   <span>Qty {num(r.quantity)} {r.unit}</span>
                   <span>Net {money(r.netTotal)}</span>
@@ -557,7 +568,12 @@ export default function InvoiceDetails({ isAdmin }) {
 
             <div className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm">
               <div className="text-[11px] uppercase tracking-wide text-slate-400">KSeF line</div>
-              <div className="break-words font-medium text-slate-800">{pending.row.ksefItemName || "—"}</div>
+              <div className="flex items-start gap-2">
+                <span className="min-w-0 break-words font-medium text-slate-800">
+                  {pending.row.ksefItemName || "—"}
+                </span>
+                <CopyButton text={pending.row.ksefItemName} />
+              </div>
               <div className="my-1.5 text-slate-300">↓</div>
               <div className="text-[11px] uppercase tracking-wide text-slate-400">Catalogue item</div>
               <div className="break-words font-semibold text-slate-800">{pendItem?.name || "?"}</div>
