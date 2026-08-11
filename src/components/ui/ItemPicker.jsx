@@ -88,7 +88,9 @@ export default function ItemPicker({
         <span aria-hidden className="shrink-0 text-xs text-slate-400">▾</span>
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={title}>
+      {/* Top-anchored: this sheet is search-driven, so the keyboard must not
+          push the results off the bottom of the screen. */}
+      <Modal open={open} onClose={() => setOpen(false)} title={title} align="top">
         <div className="sticky -top-4 z-10 -mx-4 -mt-4 border-b border-slate-100 bg-white px-4 pb-3 pt-4 sm:-mx-5 sm:px-5">
           <input
             ref={searchRef}
